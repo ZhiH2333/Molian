@@ -337,7 +337,14 @@ app.delete("/api/users/me/friends/:id", async (c) => {
 // ----- Posts -----
 const postsSelectColumns =
   "p.id, p.user_id, p.title, p.content, p.image_urls, p.is_public, p.created_at, p.updated_at, u.username, u.display_name, u.avatar_url";
+const postsSelectColumnsLegacy =
+  "p.id, p.user_id, p.content, p.image_urls, p.created_at, p.updated_at, u.username, u.display_name, u.avatar_url";
 const postsPublicWhere = "p.is_public = 1";
+
+function isSchemaError(e: unknown): boolean {
+  const msg = e && typeof (e as { message?: string }).message === "string" ? (e as { message: string }).message : String(e);
+  return msg.includes("no such column") || msg.includes("no such table");
+}
 
 app.get("/api/posts", async (c) => {
   const env = c.env;
@@ -345,16 +352,25 @@ app.get("/api/posts", async (c) => {
   const cursor = c.req.query("cursor") ?? "";
   const userId = await getUserIdFromRequest(c);
   let results: Record<string, unknown>[];
-  if (cursor) {
-    const cursorRow = await env.molian_db.prepare("SELECT created_at FROM posts WHERE id = ?").bind(cursor).first();
-    const cursorCreated = cursorRow && typeof cursorRow === "object" ? (cursorRow as Record<string, unknown>).created_at : null;
-    if (cursorCreated) {
-      const s = await env.molian_db.prepare(
-        `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id WHERE ${postsPublicWhere} AND p.created_at < ? ORDER BY p.created_at DESC LIMIT ?`
-      )
-        .bind(cursorCreated, limit)
-        .all();
-      results = s.results as Record<string, unknown>[];
+  try {
+    if (cursor) {
+      const cursorRow = await env.molian_db.prepare("SELECT created_at FROM posts WHERE id = ?").bind(cursor).first();
+      const cursorCreated = cursorRow && typeof cursorRow === "object" ? (cursorRow as Record<string, unknown>).created_at : null;
+      if (cursorCreated) {
+        const s = await env.molian_db.prepare(
+          `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id WHERE ${postsPublicWhere} AND p.created_at < ? ORDER BY p.created_at DESC LIMIT ?`
+        )
+          .bind(cursorCreated, limit)
+          .all();
+        results = s.results as Record<string, unknown>[];
+      } else {
+        const s = await env.molian_db.prepare(
+          `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id WHERE ${postsPublicWhere} ORDER BY p.created_at DESC LIMIT ?`
+        )
+          .bind(limit)
+          .all();
+        results = s.results as Record<string, unknown>[];
+      }
     } else {
       const s = await env.molian_db.prepare(
         `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id WHERE ${postsPublicWhere} ORDER BY p.created_at DESC LIMIT ?`
@@ -363,13 +379,34 @@ app.get("/api/posts", async (c) => {
         .all();
       results = s.results as Record<string, unknown>[];
     }
-  } else {
-    const s = await env.molian_db.prepare(
-      `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id WHERE ${postsPublicWhere} ORDER BY p.created_at DESC LIMIT ?`
-    )
-      .bind(limit)
-      .all();
-    results = s.results as Record<string, unknown>[];
+  } catch (e) {
+    if (!isSchemaError(e)) throw e;
+    if (cursor) {
+      const cursorRow = await env.molian_db.prepare("SELECT created_at FROM posts WHERE id = ?").bind(cursor).first();
+      const cursorCreated = cursorRow && typeof cursorRow === "object" ? (cursorRow as Record<string, unknown>).created_at : null;
+      if (cursorCreated) {
+        const s = await env.molian_db.prepare(
+          `SELECT ${postsSelectColumnsLegacy} FROM posts p JOIN users u ON p.user_id = u.id WHERE p.created_at < ? ORDER BY p.created_at DESC LIMIT ?`
+        )
+          .bind(cursorCreated, limit)
+          .all();
+        results = s.results as Record<string, unknown>[];
+      } else {
+        const s = await env.molian_db.prepare(
+          `SELECT ${postsSelectColumnsLegacy} FROM posts p JOIN users u ON p.user_id = u.id ORDER BY p.created_at DESC LIMIT ?`
+        )
+          .bind(limit)
+          .all();
+        results = s.results as Record<string, unknown>[];
+      }
+    } else {
+      const s = await env.molian_db.prepare(
+        `SELECT ${postsSelectColumnsLegacy} FROM posts p JOIN users u ON p.user_id = u.id ORDER BY p.created_at DESC LIMIT ?`
+      )
+        .bind(limit)
+        .all();
+      results = s.results as Record<string, unknown>[];
+    }
   }
   const posts = await Promise.all(
     results.map(async (r) => {
@@ -384,10 +421,10 @@ app.get("/api/posts", async (c) => {
       return {
         id: r.id,
         user_id: r.user_id,
-        title: r.title,
+        title: r.title ?? "",
         content: r.content,
         image_urls: r.image_urls,
-        is_public: r.is_public,
+        is_public: r.is_public ?? 1,
         created_at: r.created_at,
         updated_at: r.updated_at,
         like_count: likeCount?.c ?? 0,
@@ -426,24 +463,58 @@ app.post("/api/posts", async (c) => {
     const imageUrls = Array.isArray(body?.image_urls) ? (body.image_urls as string[]) : [];
     const imageUrlsJson = JSON.stringify(imageUrls);
     const id = uuid();
-    await c.env.molian_db.prepare(
-      "INSERT INTO posts (id, user_id, title, content, image_urls, is_public, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))"
-    )
-      .bind(id, userId, title || (content.split("\n")[0] ?? content), content, imageUrlsJson, isPublic)
-      .run();
-    for (const communityId of communityIds) {
+    const titleVal = title || (content.split("\n")[0] ?? content);
+    try {
       await c.env.molian_db.prepare(
-        "INSERT OR IGNORE INTO post_communities (post_id, community_id) VALUES (?, ?)"
+        "INSERT INTO posts (id, user_id, title, content, image_urls, is_public, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))"
       )
-        .bind(id, communityId)
+        .bind(id, userId, titleVal, content, imageUrlsJson, isPublic)
         .run();
+      for (const communityId of communityIds) {
+        await c.env.molian_db.prepare(
+          "INSERT OR IGNORE INTO post_communities (post_id, community_id) VALUES (?, ?)"
+        )
+          .bind(id, communityId)
+          .run();
+      }
+      const row = await c.env.molian_db.prepare(
+        `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id = ?`
+      )
+        .bind(id)
+        .first();
+      return c.json({ post: row }, 200, corsHeaders());
+    } catch (e) {
+      if (!isSchemaError(e)) throw e;
+      await c.env.molian_db.prepare(
+        "INSERT INTO posts (id, user_id, content, image_urls, created_at, updated_at) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))"
+      )
+        .bind(id, userId, content, imageUrlsJson)
+        .run();
+      const row = await c.env.molian_db.prepare(
+        `SELECT ${postsSelectColumnsLegacy} FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id = ?`
+      )
+        .bind(id)
+        .first();
+      if (!row || typeof row !== "object") return c.json({ error: "发布失败" }, 500, corsHeaders());
+      const r = row as Record<string, unknown>;
+      return c.json(
+        {
+          post: {
+            id: r.id,
+            user_id: r.user_id,
+            title: titleVal,
+            content: r.content,
+            image_urls: r.image_urls,
+            is_public: 1,
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+            user: { username: r.username, display_name: r.display_name, avatar_url: r.avatar_url },
+          },
+        },
+        200,
+        corsHeaders()
+      );
     }
-    const row = await c.env.molian_db.prepare(
-      "SELECT p.id, p.user_id, p.title, p.content, p.image_urls, p.is_public, p.created_at, p.updated_at, u.username, u.display_name, u.avatar_url FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id = ?"
-    )
-      .bind(id)
-      .first();
-    return c.json({ post: row }, 200, corsHeaders());
   } catch {
     return c.json({ error: "发布失败" }, 500, corsHeaders());
   }
@@ -451,22 +522,38 @@ app.post("/api/posts", async (c) => {
 
 app.get("/api/posts/:id", async (c) => {
   const id = c.req.param("id");
-  const row = await c.env.molian_db.prepare(
-    `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id = ?`
-  )
-    .bind(id)
-    .first();
-  if (!row || typeof row !== "object") return c.json({ error: "帖子不存在" }, 404, corsHeaders());
-  const r = row as Record<string, unknown>;
+  let row: Record<string, unknown> | null = null;
+  try {
+    const r = await c.env.molian_db.prepare(
+      `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id = ?`
+    )
+      .bind(id)
+      .first();
+    if (r && typeof r === "object") row = r as Record<string, unknown>;
+  } catch (e) {
+    if (!isSchemaError(e)) throw e;
+    const r = await c.env.molian_db.prepare(
+      `SELECT ${postsSelectColumnsLegacy} FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id = ?`
+    )
+      .bind(id)
+      .first();
+    if (r && typeof r === "object") row = r as Record<string, unknown>;
+    if (row) {
+      row.title = "";
+      row.is_public = 1;
+    }
+  }
+  if (!row) return c.json({ error: "帖子不存在" }, 404, corsHeaders());
+  const r = row;
   return c.json(
     {
       post: {
         id: r.id,
         user_id: r.user_id,
-        title: r.title,
+        title: r.title ?? "",
         content: r.content,
         image_urls: r.image_urls,
-        is_public: r.is_public,
+        is_public: r.is_public ?? 1,
         created_at: r.created_at,
         updated_at: r.updated_at,
         user: { username: r.username, display_name: r.display_name, avatar_url: r.avatar_url },
@@ -1119,23 +1206,32 @@ app.post("/api/notifications/subscribe", async (c) => {
   }
 });
 
-// ----- Feeds（发现流，仅 is_public 帖子）-----
+// ----- Feeds（发现流，仅 is_public 帖子；未迁移时退回全部帖子）-----
 app.get("/api/feeds", async (c) => {
   const env = c.env;
   const limit = Math.min(Number(c.req.query("limit")) || 20, 100);
   const cursor = c.req.query("cursor") ?? "";
   const userId = await getUserIdFromRequest(c);
   let results: Record<string, unknown>[];
-  if (cursor) {
-    const cursorRow = await env.molian_db.prepare("SELECT created_at FROM posts WHERE id = ?").bind(cursor).first();
-    const cursorCreated = cursorRow && typeof cursorRow === "object" ? (cursorRow as Record<string, unknown>).created_at : null;
-    if (cursorCreated) {
-      const s = await env.molian_db.prepare(
-        `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id WHERE ${postsPublicWhere} AND p.created_at < ? ORDER BY p.created_at DESC LIMIT ?`
-      )
-        .bind(cursorCreated, limit)
-        .all();
-      results = s.results as Record<string, unknown>[];
+  try {
+    if (cursor) {
+      const cursorRow = await env.molian_db.prepare("SELECT created_at FROM posts WHERE id = ?").bind(cursor).first();
+      const cursorCreated = cursorRow && typeof cursorRow === "object" ? (cursorRow as Record<string, unknown>).created_at : null;
+      if (cursorCreated) {
+        const s = await env.molian_db.prepare(
+          `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id WHERE ${postsPublicWhere} AND p.created_at < ? ORDER BY p.created_at DESC LIMIT ?`
+        )
+          .bind(cursorCreated, limit)
+          .all();
+        results = s.results as Record<string, unknown>[];
+      } else {
+        const s = await env.molian_db.prepare(
+          `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id WHERE ${postsPublicWhere} ORDER BY p.created_at DESC LIMIT ?`
+        )
+          .bind(limit)
+          .all();
+        results = s.results as Record<string, unknown>[];
+      }
     } else {
       const s = await env.molian_db.prepare(
         `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id WHERE ${postsPublicWhere} ORDER BY p.created_at DESC LIMIT ?`
@@ -1144,13 +1240,34 @@ app.get("/api/feeds", async (c) => {
         .all();
       results = s.results as Record<string, unknown>[];
     }
-  } else {
-    const s = await env.molian_db.prepare(
-      `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id WHERE ${postsPublicWhere} ORDER BY p.created_at DESC LIMIT ?`
-    )
-      .bind(limit)
-      .all();
-    results = s.results as Record<string, unknown>[];
+  } catch (e) {
+    if (!isSchemaError(e)) throw e;
+    if (cursor) {
+      const cursorRow = await env.molian_db.prepare("SELECT created_at FROM posts WHERE id = ?").bind(cursor).first();
+      const cursorCreated = cursorRow && typeof cursorRow === "object" ? (cursorRow as Record<string, unknown>).created_at : null;
+      if (cursorCreated) {
+        const s = await env.molian_db.prepare(
+          `SELECT ${postsSelectColumnsLegacy} FROM posts p JOIN users u ON p.user_id = u.id WHERE p.created_at < ? ORDER BY p.created_at DESC LIMIT ?`
+        )
+          .bind(cursorCreated, limit)
+          .all();
+        results = s.results as Record<string, unknown>[];
+      } else {
+        const s = await env.molian_db.prepare(
+          `SELECT ${postsSelectColumnsLegacy} FROM posts p JOIN users u ON p.user_id = u.id ORDER BY p.created_at DESC LIMIT ?`
+        )
+          .bind(limit)
+          .all();
+        results = s.results as Record<string, unknown>[];
+      }
+    } else {
+      const s = await env.molian_db.prepare(
+        `SELECT ${postsSelectColumnsLegacy} FROM posts p JOIN users u ON p.user_id = u.id ORDER BY p.created_at DESC LIMIT ?`
+      )
+        .bind(limit)
+        .all();
+      results = s.results as Record<string, unknown>[];
+    }
   }
   const posts = await Promise.all(
     results.map(async (r) => {
@@ -1165,10 +1282,10 @@ app.get("/api/feeds", async (c) => {
       return {
         id: r.id,
         user_id: r.user_id,
-        title: r.title,
+        title: r.title ?? "",
         content: r.content,
         image_urls: r.image_urls,
-        is_public: r.is_public,
+        is_public: r.is_public ?? 1,
         created_at: r.created_at,
         updated_at: r.updated_at,
         like_count: likeCount?.c ?? 0,
