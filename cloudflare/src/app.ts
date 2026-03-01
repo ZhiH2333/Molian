@@ -335,9 +335,12 @@ app.delete("/api/users/me/friends/:id", async (c) => {
 });
 
 // ----- Posts -----
+const postsSelectColumns =
+  "p.id, p.user_id, p.title, p.content, p.image_urls, p.is_public, p.created_at, p.updated_at, u.username, u.display_name, u.avatar_url";
+const postsPublicWhere = "p.is_public = 1";
+
 app.get("/api/posts", async (c) => {
   const env = c.env;
-  const secret = getSecret(env);
   const limit = Math.min(Number(c.req.query("limit")) || 20, 100);
   const cursor = c.req.query("cursor") ?? "";
   const userId = await getUserIdFromRequest(c);
@@ -347,14 +350,14 @@ app.get("/api/posts", async (c) => {
     const cursorCreated = cursorRow && typeof cursorRow === "object" ? (cursorRow as Record<string, unknown>).created_at : null;
     if (cursorCreated) {
       const s = await env.molian_db.prepare(
-        "SELECT p.id, p.user_id, p.content, p.image_urls, p.created_at, p.updated_at, u.username, u.display_name, u.avatar_url FROM posts p JOIN users u ON p.user_id = u.id WHERE p.created_at < ? ORDER BY p.created_at DESC LIMIT ?"
+        `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id WHERE ${postsPublicWhere} AND p.created_at < ? ORDER BY p.created_at DESC LIMIT ?`
       )
         .bind(cursorCreated, limit)
         .all();
       results = s.results as Record<string, unknown>[];
     } else {
       const s = await env.molian_db.prepare(
-        "SELECT p.id, p.user_id, p.content, p.image_urls, p.created_at, p.updated_at, u.username, u.display_name, u.avatar_url FROM posts p JOIN users u ON p.user_id = u.id ORDER BY p.created_at DESC LIMIT ?"
+        `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id WHERE ${postsPublicWhere} ORDER BY p.created_at DESC LIMIT ?`
       )
         .bind(limit)
         .all();
@@ -362,7 +365,7 @@ app.get("/api/posts", async (c) => {
     }
   } else {
     const s = await env.molian_db.prepare(
-      "SELECT p.id, p.user_id, p.content, p.image_urls, p.created_at, p.updated_at, u.username, u.display_name, u.avatar_url FROM posts p JOIN users u ON p.user_id = u.id ORDER BY p.created_at DESC LIMIT ?"
+      `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id WHERE ${postsPublicWhere} ORDER BY p.created_at DESC LIMIT ?`
     )
       .bind(limit)
       .all();
@@ -381,8 +384,10 @@ app.get("/api/posts", async (c) => {
       return {
         id: r.id,
         user_id: r.user_id,
+        title: r.title,
         content: r.content,
         image_urls: r.image_urls,
+        is_public: r.is_public,
         created_at: r.created_at,
         updated_at: r.updated_at,
         like_count: likeCount?.c ?? 0,
@@ -400,19 +405,41 @@ app.post("/api/posts", async (c) => {
   const userId = await getUserIdFromRequest(c);
   if (!userId) return c.json({ error: "未登录" }, 401, corsHeaders());
   try {
-    const body = (await c.req.json()) as { content?: string; image_urls?: string[] };
+    const body = (await c.req.json()) as {
+      content?: string;
+      image_urls?: string[];
+      title?: string;
+      is_public?: boolean;
+      community_ids?: string[];
+    };
     const content = String(body?.content ?? "").trim();
     if (!content) return c.json({ error: "内容不能为空" }, 400, corsHeaders());
+    const title = String(body?.title ?? "").trim();
+    const isPublic = body?.is_public !== false ? 1 : 0;
+    const communityIds = Array.isArray(body?.community_ids) ? (body.community_ids as string[]) : [];
+    if (communityIds.length > 0) {
+      for (const rid of communityIds) {
+        const realm = await c.env.molian_db.prepare("SELECT id FROM realms WHERE id = ?").bind(rid).first();
+        if (!realm) return c.json({ error: `圈子不存在: ${rid}` }, 400, corsHeaders());
+      }
+    }
     const imageUrls = Array.isArray(body?.image_urls) ? (body.image_urls as string[]) : [];
     const imageUrlsJson = JSON.stringify(imageUrls);
     const id = uuid();
     await c.env.molian_db.prepare(
-      "INSERT INTO posts (id, user_id, content, image_urls, created_at, updated_at) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))"
+      "INSERT INTO posts (id, user_id, title, content, image_urls, is_public, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))"
     )
-      .bind(id, userId, content, imageUrlsJson)
+      .bind(id, userId, title || (content.split("\n")[0] ?? content), content, imageUrlsJson, isPublic)
       .run();
+    for (const communityId of communityIds) {
+      await c.env.molian_db.prepare(
+        "INSERT OR IGNORE INTO post_communities (post_id, community_id) VALUES (?, ?)"
+      )
+        .bind(id, communityId)
+        .run();
+    }
     const row = await c.env.molian_db.prepare(
-      "SELECT p.id, p.user_id, p.content, p.image_urls, p.created_at, p.updated_at, u.username, u.display_name, u.avatar_url FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id = ?"
+      "SELECT p.id, p.user_id, p.title, p.content, p.image_urls, p.is_public, p.created_at, p.updated_at, u.username, u.display_name, u.avatar_url FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id = ?"
     )
       .bind(id)
       .first();
@@ -425,7 +452,7 @@ app.post("/api/posts", async (c) => {
 app.get("/api/posts/:id", async (c) => {
   const id = c.req.param("id");
   const row = await c.env.molian_db.prepare(
-    "SELECT p.id, p.user_id, p.content, p.image_urls, p.created_at, p.updated_at, u.username, u.display_name, u.avatar_url FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id = ?"
+    `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id = ?`
   )
     .bind(id)
     .first();
@@ -436,8 +463,10 @@ app.get("/api/posts/:id", async (c) => {
       post: {
         id: r.id,
         user_id: r.user_id,
+        title: r.title,
         content: r.content,
         image_urls: r.image_urls,
+        is_public: r.is_public,
         created_at: r.created_at,
         updated_at: r.updated_at,
         user: { username: r.username, display_name: r.display_name, avatar_url: r.avatar_url },
@@ -473,7 +502,7 @@ app.patch("/api/posts/:id", async (c) => {
   values.push(id);
   await c.env.molian_db.prepare(`UPDATE posts SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
   const updatedRow = (await c.env.molian_db.prepare(
-    "SELECT p.id, p.user_id, p.content, p.image_urls, p.created_at, p.updated_at, u.username, u.display_name, u.avatar_url FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id = ?"
+    `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id = ?`
   )
     .bind(id)
     .first()) as Record<string, unknown> | null;
@@ -481,8 +510,10 @@ app.patch("/api/posts/:id", async (c) => {
   const post = {
     id: updatedRow.id,
     user_id: updatedRow.user_id,
+    title: updatedRow.title,
     content: updatedRow.content,
     image_urls: updatedRow.image_urls,
+    is_public: updatedRow.is_public,
     created_at: updatedRow.created_at,
     updated_at: updatedRow.updated_at,
     user: { username: updatedRow.username, display_name: updatedRow.display_name, avatar_url: updatedRow.avatar_url },
@@ -504,13 +535,13 @@ app.delete("/api/posts/:id", async (c) => {
     if (row.user_id !== userId) return c.json({ error: "只能删除自己的帖子" }, 403, corsHeaders());
 
     const parseImageUrls = (raw: unknown): string[] => {
-      if (Array.isArray(raw)) return raw.map((v) => String(v)).filter((v) => v.trim().isNotEmpty);
+      if (Array.isArray(raw)) return raw.map((v) => String(v)).filter((v) => v.trim().length > 0);
       if (typeof raw === "string") {
         const s = raw.trim();
         if (!s) return [];
         try {
           const parsed = JSON.parse(s);
-          if (Array.isArray(parsed)) return parsed.map((v) => String(v)).filter((v) => v.trim().isNotEmpty);
+          if (Array.isArray(parsed)) return parsed.map((v) => String(v)).filter((v) => v.trim().length > 0);
         } catch (_) {
           // ignore json parse error
         }
@@ -585,7 +616,7 @@ app.delete("/api/posts/:id", async (c) => {
       new Set(
         imageUrls
           .map((url) => extractAssetKey(url))
-          .filter((v): v is string => !!v && v.trim().isNotEmpty)
+          .filter((v): v is string => !!v && v.trim().length > 0)
       )
     );
 
@@ -1088,10 +1119,9 @@ app.post("/api/notifications/subscribe", async (c) => {
   }
 });
 
-// ----- Feeds（发现流，暂与帖子列表一致）-----
+// ----- Feeds（发现流，仅 is_public 帖子）-----
 app.get("/api/feeds", async (c) => {
   const env = c.env;
-  const secret = getSecret(env);
   const limit = Math.min(Number(c.req.query("limit")) || 20, 100);
   const cursor = c.req.query("cursor") ?? "";
   const userId = await getUserIdFromRequest(c);
@@ -1101,14 +1131,14 @@ app.get("/api/feeds", async (c) => {
     const cursorCreated = cursorRow && typeof cursorRow === "object" ? (cursorRow as Record<string, unknown>).created_at : null;
     if (cursorCreated) {
       const s = await env.molian_db.prepare(
-        "SELECT p.id, p.user_id, p.content, p.image_urls, p.created_at, p.updated_at, u.username, u.display_name, u.avatar_url FROM posts p JOIN users u ON p.user_id = u.id WHERE p.created_at < ? ORDER BY p.created_at DESC LIMIT ?"
+        `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id WHERE ${postsPublicWhere} AND p.created_at < ? ORDER BY p.created_at DESC LIMIT ?`
       )
         .bind(cursorCreated, limit)
         .all();
       results = s.results as Record<string, unknown>[];
     } else {
       const s = await env.molian_db.prepare(
-        "SELECT p.id, p.user_id, p.content, p.image_urls, p.created_at, p.updated_at, u.username, u.display_name, u.avatar_url FROM posts p JOIN users u ON p.user_id = u.id ORDER BY p.created_at DESC LIMIT ?"
+        `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id WHERE ${postsPublicWhere} ORDER BY p.created_at DESC LIMIT ?`
       )
         .bind(limit)
         .all();
@@ -1116,7 +1146,7 @@ app.get("/api/feeds", async (c) => {
     }
   } else {
     const s = await env.molian_db.prepare(
-      "SELECT p.id, p.user_id, p.content, p.image_urls, p.created_at, p.updated_at, u.username, u.display_name, u.avatar_url FROM posts p JOIN users u ON p.user_id = u.id ORDER BY p.created_at DESC LIMIT ?"
+      `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id WHERE ${postsPublicWhere} ORDER BY p.created_at DESC LIMIT ?`
     )
       .bind(limit)
       .all();
@@ -1135,8 +1165,10 @@ app.get("/api/feeds", async (c) => {
       return {
         id: r.id,
         user_id: r.user_id,
+        title: r.title,
         content: r.content,
         image_urls: r.image_urls,
+        is_public: r.is_public,
         created_at: r.created_at,
         updated_at: r.updated_at,
         like_count: likeCount?.c ?? 0,
@@ -1173,6 +1205,72 @@ app.get("/api/realms/:id", async (c) => {
     .first();
   if (!row || typeof row !== "object") return c.json({ error: "圈子不存在" }, 404, corsHeaders());
   return c.json({ realm: row }, 200, corsHeaders());
+});
+
+// 圈子页帖子列表：仅通过 post_communities 关联的帖子（含 only 与 public+圈子）
+app.get("/api/realms/:id/posts", async (c) => {
+  const realmId = c.req.param("id");
+  const limit = Math.min(Number(c.req.query("limit")) || 20, 100);
+  const cursor = c.req.query("cursor") ?? "";
+  const userId = await getUserIdFromRequest(c);
+  const realm = await c.env.molian_db.prepare("SELECT id FROM realms WHERE id = ? OR slug = ?").bind(realmId, realmId).first();
+  if (!realm || typeof realm !== "object") return c.json({ error: "圈子不存在" }, 404, corsHeaders());
+  const rid = (realm as { id: string }).id;
+  let results: Record<string, unknown>[];
+  if (cursor) {
+    const cursorRow = await c.env.molian_db.prepare("SELECT p.created_at FROM posts p JOIN post_communities pc ON p.id = pc.post_id WHERE pc.community_id = ? AND p.id = ?").bind(rid, cursor).first();
+    const cursorCreated = cursorRow && typeof cursorRow === "object" ? (cursorRow as Record<string, unknown>).created_at : null;
+    if (cursorCreated) {
+      const s = await c.env.molian_db.prepare(
+        `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id JOIN post_communities pc ON p.id = pc.post_id WHERE pc.community_id = ? AND p.created_at < ? ORDER BY p.created_at DESC LIMIT ?`
+      )
+        .bind(rid, cursorCreated, limit)
+        .all();
+      results = s.results as Record<string, unknown>[];
+    } else {
+      const s = await c.env.molian_db.prepare(
+        `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id JOIN post_communities pc ON p.id = pc.post_id WHERE pc.community_id = ? ORDER BY p.created_at DESC LIMIT ?`
+      )
+        .bind(rid, limit)
+        .all();
+      results = s.results as Record<string, unknown>[];
+    }
+  } else {
+    const s = await c.env.molian_db.prepare(
+      `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id JOIN post_communities pc ON p.id = pc.post_id WHERE pc.community_id = ? ORDER BY p.created_at DESC LIMIT ?`
+    )
+      .bind(rid, limit)
+      .all();
+    results = s.results as Record<string, unknown>[];
+  }
+  const posts = await Promise.all(
+    results.map(async (r) => {
+      const postId = r.id as string;
+      const likeCount = (await c.env.molian_db.prepare("SELECT COUNT(*) as c FROM post_likes WHERE post_id = ?").bind(postId).first()) as { c: number };
+      let liked = false;
+      if (userId) {
+        const l = await c.env.molian_db.prepare("SELECT 1 FROM post_likes WHERE post_id = ? AND user_id = ?").bind(postId, userId).first();
+        liked = !!l;
+      }
+      const commentCount = (await c.env.molian_db.prepare("SELECT COUNT(*) as c FROM comments WHERE post_id = ?").bind(postId).first()) as { c: number };
+      return {
+        id: r.id,
+        user_id: r.user_id,
+        title: r.title,
+        content: r.content,
+        image_urls: r.image_urls,
+        is_public: r.is_public,
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+        like_count: likeCount?.c ?? 0,
+        liked,
+        comment_count: commentCount?.c ?? 0,
+        user: { username: r.username, display_name: r.display_name, avatar_url: r.avatar_url },
+      };
+    })
+  );
+  const nextCursor = posts.length === limit && posts.length > 0 ? (posts[posts.length - 1] as { id?: unknown }).id : null;
+  return c.json({ posts, nextCursor }, 200, corsHeaders());
 });
 
 app.post("/api/realms/:id/join", async (c) => {

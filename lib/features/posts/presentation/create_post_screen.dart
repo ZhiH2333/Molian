@@ -326,7 +326,9 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
         if (!mounted) return;
         context.pop();
       } else {
+        final firstLine = content.split('\n').firstOrNull ?? content;
         await repo.createPost(
+          title: firstLine,
           content: content,
           imageUrls: _imageUrls.isEmpty ? null : _imageUrls,
         );
