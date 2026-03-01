@@ -7,6 +7,8 @@ class RealmModel {
     this.description,
     this.avatarUrl,
     this.createdAt,
+    this.joined = false,
+    this.isCreator = false,
   });
 
   final String id;
@@ -15,6 +17,8 @@ class RealmModel {
   final String? description;
   final String? avatarUrl;
   final String? createdAt;
+  final bool joined;
+  final bool isCreator;
 
   factory RealmModel.fromJson(Map<String, dynamic> json) {
     return RealmModel(
@@ -24,6 +28,8 @@ class RealmModel {
       description: json['description'] as String?,
       avatarUrl: json['avatar_url'] as String?,
       createdAt: json['created_at'] as String?,
+      joined: json['joined'] as bool? ?? false,
+      isCreator: json['is_creator'] as bool? ?? false,
     );
   }
 }

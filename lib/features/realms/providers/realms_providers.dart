@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/dio_provider.dart';
+import '../../posts/data/models/post_model.dart';
 import '../data/realms_repository.dart';
 import '../data/models/realm_model.dart';
 
@@ -36,4 +37,10 @@ final realmsListProvider =
 final realmDetailProvider = FutureProvider.family<RealmModel?, String>((ref, id) async {
   final repo = ref.watch(realmsRepositoryProvider);
   return repo.getRealm(id);
+});
+
+/// 某圈子下的帖子列表。
+final realmPostsProvider = FutureProvider.family<List<PostModel>, String>((ref, realmId) async {
+  final repo = ref.watch(realmsRepositoryProvider);
+  return repo.fetchRealmPosts(realmId);
 });

@@ -77,10 +77,22 @@ class PostsRepository {
     }
   }
 
-  /// 更新帖子，仅发布者有权编辑。
-  Future<PostModel> updatePost(String id, {required String content, List<String>? imageUrls}) async {
-    final data = <String, dynamic>{'content': content};
+  /// 更新帖子，仅发布者有权编辑。支持 title、content、is_public、community_ids、image_urls。
+  Future<PostModel> updatePost(
+    String id, {
+    String? title,
+    String? content,
+    bool? isPublic,
+    List<String>? communityIds,
+    List<String>? imageUrls,
+  }) async {
+    final data = <String, dynamic>{};
+    if (title != null) data['title'] = title;
+    if (content != null) data['content'] = content;
+    if (isPublic != null) data['is_public'] = isPublic;
+    if (communityIds != null) data['community_ids'] = communityIds;
     if (imageUrls != null) data['image_urls'] = imageUrls;
+    if (data.isEmpty) throw Exception('无有效更新字段');
     final response = await _dio.patch<Map<String, dynamic>>('${ApiConstants.posts}/$id', data: data);
     final responseData = response.data;
     if (responseData == null || responseData['post'] == null) throw Exception('更新响应异常');

@@ -6,14 +6,19 @@ import '../../core/constants/layout_constants.dart';
 import '../../core/router/app_router.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/auto_leading_button.dart';
+import '../posts/data/models/post_model.dart';
+import '../posts/providers/posts_providers.dart';
 import '../realms/data/models/realm_model.dart';
 import '../realms/data/realms_repository.dart';
 import '../realms/providers/realms_providers.dart';
 import 'create_post_controller.dart';
 
-/// 发布帖子页：标题、内容、圈子选择、仅圈子可见、发布。Material 3 风格。
+/// 发布帖子页：标题、内容、圈子选择、仅圈子可见、发布；支持编辑模式（与创建界面一致）。
 class CreatePostPage extends ConsumerStatefulWidget {
-  const CreatePostPage({super.key});
+  const CreatePostPage({super.key, this.postId, this.initialPost});
+
+  final String? postId;
+  final PostModel? initialPost;
 
   @override
   ConsumerState<CreatePostPage> createState() => _CreatePostPageState();
@@ -27,6 +32,7 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
   late final TextEditingController _titleController;
   late final TextEditingController _descriptionController;
   late final TextEditingController _contentController;
+  bool _prefillDone = false;
 
   @override
   void initState() {
@@ -34,6 +40,46 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
     _titleController = TextEditingController();
     _descriptionController = TextEditingController();
     _contentController = TextEditingController();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initEditOrCreate());
+  }
+
+  void _initEditOrCreate() {
+    if (!mounted) return;
+    final notifier = ref.read(createPostControllerProvider.notifier);
+    if (widget.postId == null) {
+      notifier.clearEditMode();
+      return;
+    }
+    if (widget.initialPost != null) {
+      _prefillFromPost(widget.initialPost!, overwrite: false);
+    }
+    _loadAndPrefillPost(widget.postId!);
+  }
+
+  /// [overwrite] 为 true 时用服务端完整数据（含 community_ids）覆盖，用于编辑时拉取单帖后回填。
+  void _prefillFromPost(PostModel post, {bool overwrite = false}) {
+    if (!overwrite && _prefillDone) return;
+    if (!mounted) return;
+    if (overwrite) _prefillDone = true;
+    final ids = post.communityIds ?? <String>[];
+    final isCircleOnly = ids.isNotEmpty && !post.isPublic;
+    ref.read(createPostControllerProvider.notifier).setEditPost(
+      post.id,
+      post.title,
+      '',
+      post.content,
+      ids,
+      isCircleOnly,
+    );
+    _titleController.text = post.title;
+    _descriptionController.text = '';
+    _contentController.text = post.content;
+  }
+
+  Future<void> _loadAndPrefillPost(String postId) async {
+    if (!mounted) return;
+    final post = await ref.read(postsRepositoryProvider).getPost(postId);
+    if (post != null && mounted) _prefillFromPost(post, overwrite: true);
   }
 
   @override
@@ -75,9 +121,10 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
     if (!mounted) return;
     if (success) {
       context.go(AppRoutes.home);
+      final isEdit = ref.read(createPostControllerProvider).isEditMode;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('发布成功'),
+          content: Text(isEdit ? '已保存' : '发布成功'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -102,7 +149,7 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
     return AppScaffold(
       appBar: AppBar(
         leading: const AutoLeadingButton(),
-        title: const Text('发布'),
+        title: Text(state.isEditMode ? '编辑' : '发布'),
       ),
       body: Form(
         key: _formKey,
@@ -250,7 +297,7 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
                         color: colorScheme.onPrimary,
                       ),
                     )
-                  : const Text('发布'),
+                  : Text(state.isEditMode ? '保存' : '发布'),
             ),
           ],
         ),

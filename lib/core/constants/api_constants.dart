@@ -37,6 +37,7 @@ class ApiConstants {
   static const String files = '/api/files';
   static const String filesConfirm = '/api/files/confirm';
   static String realmById(String id) => '$realms/$id';
+  static String realmPosts(String id) => '$realms/$id/posts';
   static String realmJoin(String id) => '$realms/$id/join';
   static String realmLeave(String id) => '$realms/$id/leave';
   static String assetUrl(String key) =>

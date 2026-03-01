@@ -39,6 +39,24 @@ class CreatePostController extends Notifier<CreatePostState> {
     state = state.copyWith(isCircleOnly: value, errorMessage: null);
   }
 
+  /// 进入编辑模式并预填帖子数据。
+  void setEditPost(String postId, String title, String description, String content, List<String> communityIds, bool isCircleOnly) {
+    state = state.copyWith(
+      postId: postId,
+      title: title,
+      description: description,
+      content: content,
+      selectedCommunityIds: communityIds,
+      isCircleOnly: isCircleOnly,
+      errorMessage: null,
+    );
+  }
+
+  /// 清除编辑模式，回到发布新帖。
+  void clearEditMode() {
+    state = state.copyWith(postId: null, errorMessage: null);
+  }
+
   Future<bool> submit() async {
     final title = state.title.trim();
     final description = state.description.trim();
@@ -51,17 +69,31 @@ class CreatePostController extends Notifier<CreatePostState> {
     final ids = state.selectedCommunityIds;
     final isCircleOnly = ids.isNotEmpty && state.isCircleOnly;
     final isPublic = ids.isEmpty || !isCircleOnly;
+    final effectiveTitle = title.isEmpty ? (content.split('\n').firstOrNull ?? content) : title;
     state = state.copyWith(isLoading: true, errorMessage: null);
     try {
       final repo = ref.read(postsRepositoryProvider);
-      await repo.createPost(
-        title: title.isEmpty ? content.split('\n').firstOrNull ?? content : title,
-        content: content,
-        isPublic: isPublic,
-        communityIds: ids.isEmpty ? null : ids,
-      );
-      ref.invalidate(postsListProvider(const PostsListKey()));
-      ref.invalidate(feedsListProvider(const PostsListKey()));
+      if (state.isEditMode && state.postId != null) {
+        await repo.updatePost(
+          state.postId!,
+          title: effectiveTitle,
+          content: content,
+          isPublic: isPublic,
+          communityIds: ids.isEmpty ? <String>[] : ids,
+        );
+        ref.invalidate(postsListProvider(const PostsListKey()));
+        ref.invalidate(feedsListProvider(const PostsListKey()));
+        ref.invalidate(postDetailProvider(state.postId!));
+      } else {
+        await repo.createPost(
+          title: effectiveTitle,
+          content: content,
+          isPublic: isPublic,
+          communityIds: ids.isEmpty ? null : ids,
+        );
+        ref.invalidate(postsListProvider(const PostsListKey()));
+        ref.invalidate(feedsListProvider(const PostsListKey()));
+      }
       state = state.copyWith(isLoading: false);
       return true;
     } catch (e) {

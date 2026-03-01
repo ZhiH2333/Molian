@@ -1,4 +1,4 @@
-/// 发布帖子页状态：标题、描述、内容、已选圈子、仅圈子可见、加载与错误。
+/// 发布帖子页状态：标题、描述、内容、已选圈子、仅圈子可见、编辑用 postId、加载与错误。
 class CreatePostState {
   const CreatePostState({
     this.title = '',
@@ -6,6 +6,7 @@ class CreatePostState {
     this.content = '',
     this.selectedCommunityIds = const [],
     this.isCircleOnly = false,
+    this.postId,
     this.isLoading = false,
     this.errorMessage,
   });
@@ -15,6 +16,7 @@ class CreatePostState {
   final String content;
   final List<String> selectedCommunityIds;
   final bool isCircleOnly;
+  final String? postId;
   final bool isLoading;
   final String? errorMessage;
 
@@ -24,12 +26,15 @@ class CreatePostState {
 
   bool get effectiveIsPublic => !isCircleOnly;
 
+  bool get isEditMode => postId != null && postId!.isNotEmpty;
+
   CreatePostState copyWith({
     String? title,
     String? description,
     String? content,
     List<String>? selectedCommunityIds,
     bool? isCircleOnly,
+    String? postId,
     bool? isLoading,
     String? errorMessage,
   }) {
@@ -39,6 +44,7 @@ class CreatePostState {
       content: content ?? this.content,
       selectedCommunityIds: selectedCommunityIds ?? this.selectedCommunityIds,
       isCircleOnly: isCircleOnly ?? this.isCircleOnly,
+      postId: postId ?? this.postId,
       isLoading: isLoading ?? this.isLoading,
       errorMessage: errorMessage,
     );

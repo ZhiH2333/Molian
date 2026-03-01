@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../../core/constants/api_constants.dart';
+import '../../posts/data/models/post_model.dart';
 import 'models/realm_model.dart';
 
 /// 圈子列表 scope：已加入、我创建的、全部。
@@ -89,5 +90,36 @@ class RealmsRepository {
 
   Future<void> leaveRealm(String realmId) async {
     await _dio.post<Map<String, dynamic>>(ApiConstants.realmLeave(realmId));
+  }
+
+  /// 获取某圈子下的帖子列表。
+  Future<List<PostModel>> fetchRealmPosts(String realmId, {int limit = 20, String? cursor}) async {
+    final query = <String, String>{'limit': limit.toString()};
+    if (cursor != null && cursor.isNotEmpty) query['cursor'] = cursor;
+    final uri = Uri.parse(ApiConstants.realmPosts(realmId)).replace(queryParameters: query);
+    final response = await _dio.get<Map<String, dynamic>>(uri.toString());
+    final data = response.data;
+    if (data == null || data['posts'] is! List) return <PostModel>[];
+    return (data['posts'] as List)
+        .map((e) => PostModel.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// 更新圈子（仅创建者）。可选 name、slug、description。
+  Future<RealmModel> updateRealm(String id, {String? name, String? slug, String? description}) async {
+    final body = <String, dynamic>{};
+    if (name != null && name.trim().isNotEmpty) body['name'] = name.trim();
+    if (slug != null && slug.trim().isNotEmpty) body['slug'] = slug.trim();
+    if (description != null) body['description'] = description.trim().isEmpty ? null : description.trim();
+    if (body.isEmpty) throw Exception('无有效更新字段');
+    final response = await _dio.patch<Map<String, dynamic>>(ApiConstants.realmById(id), data: body);
+    final data = response.data;
+    if (data == null || data['realm'] == null) throw Exception('更新圈子响应异常');
+    return RealmModel.fromJson(data['realm'] as Map<String, dynamic>);
+  }
+
+  /// 删除圈子（仅创建者）。
+  Future<void> deleteRealm(String id) async {
+    await _dio.delete<Map<String, dynamic>>(ApiConstants.realmById(id));
   }
 }

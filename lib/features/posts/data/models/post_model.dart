@@ -6,7 +6,10 @@ class PostModel {
     required this.id,
     required this.userId,
     required this.content,
+    this.title = '',
     this.imageUrls,
+    this.isPublic = true,
+    this.communityIds,
     this.createdAt,
     this.updatedAt,
     this.likeCount = 0,
@@ -22,7 +25,10 @@ class PostModel {
   final String id;
   final String userId;
   final String content;
+  final String title;
   final List<String>? imageUrls;
+  final bool isPublic;
+  final List<String>? communityIds;
   final String? createdAt;
   final String? updatedAt;
   final int likeCount;
@@ -48,15 +54,24 @@ class PostModel {
         }
       }
     }
+    List<String>? communityIds;
+    if (json['community_ids'] is List) {
+      communityIds = (json['community_ids'] as List).map((e) => e.toString()).toList();
+    }
     PostUser? u;
     if (json['user'] is Map<String, dynamic>) {
       u = PostUser.fromJson(json['user'] as Map<String, dynamic>);
     }
+    final isPublicRaw = json['is_public'];
+    final bool isPublic = isPublicRaw == true || isPublicRaw == 1;
     return PostModel(
       id: json['id'] as String,
       userId: json['user_id'] as String,
       content: json['content'] as String,
+      title: (json['title'] as String?)?.trim() ?? '',
       imageUrls: urls,
+      isPublic: isPublic,
+      communityIds: communityIds,
       createdAt: json['created_at'] as String?,
       updatedAt: json['updated_at'] as String?,
       likeCount: (json['like_count'] as num?)?.toInt() ?? 0,

@@ -85,6 +85,16 @@ class PostCard extends ConsumerWidget {
                   ref: ref,
                   onPostDeleted: onPostDeleted,
                 ),
+                if (post.title.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 4),
+                  Text(
+                    post.title,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 4),
                 _PostContent(content: post.content),
                 if (post.imageUrls != null && post.imageUrls!.isNotEmpty) ...<Widget>[

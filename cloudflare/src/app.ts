@@ -545,6 +545,11 @@ app.get("/api/posts/:id", async (c) => {
   }
   if (!row) return c.json({ error: "帖子不存在" }, 404, corsHeaders());
   const r = row;
+  let communityIds: string[] = [];
+  try {
+    const pc = await c.env.molian_db.prepare("SELECT community_id FROM post_communities WHERE post_id = ?").bind(r.id).all();
+    communityIds = (pc.results as { community_id: string }[]).map((x) => x.community_id);
+  } catch (_) {}
   return c.json(
     {
       post: {
@@ -554,6 +559,7 @@ app.get("/api/posts/:id", async (c) => {
         content: r.content,
         image_urls: r.image_urls,
         is_public: r.is_public ?? 1,
+        community_ids: communityIds,
         created_at: r.created_at,
         updated_at: r.updated_at,
         user: { username: r.username, display_name: r.display_name, avatar_url: r.avatar_url },
@@ -571,10 +577,20 @@ app.patch("/api/posts/:id", async (c) => {
   const row = (await c.env.molian_db.prepare("SELECT user_id FROM posts WHERE id = ?").bind(id).first()) as { user_id: string } | null;
   if (!row) return c.json({ error: "帖子不存在" }, 404, corsHeaders());
   if (row.user_id !== userId) return c.json({ error: "只能编辑自己的帖子" }, 403, corsHeaders());
-  const body = (await c.req.json()) as { content?: string; image_urls?: string[] };
+  const body = (await c.req.json()) as {
+    content?: string;
+    image_urls?: string[];
+    title?: string;
+    is_public?: boolean;
+    community_ids?: string[];
+  };
   const content = body?.content !== undefined ? String(body.content).trim() : null;
   const imageUrls = Array.isArray(body?.image_urls) ? (body.image_urls as string[]) : null;
-  if (content === null && imageUrls === null) return c.json({ error: "无有效更新字段" }, 400, corsHeaders());
+  const title = body?.title !== undefined ? String(body.title).trim() : null;
+  const isPublic = body?.is_public !== undefined ? (body.is_public ? 1 : 0) : null;
+  const communityIds = Array.isArray(body?.community_ids) ? (body.community_ids as string[]) : null;
+  if (content === null && imageUrls === null && title === null && isPublic === null && communityIds === null)
+    return c.json({ error: "无有效更新字段" }, 400, corsHeaders());
   if (content !== null && !content) return c.json({ error: "内容不能为空" }, 400, corsHeaders());
   const updates: string[] = ["updated_at = datetime('now')"];
   const values: unknown[] = [];
@@ -582,25 +598,66 @@ app.patch("/api/posts/:id", async (c) => {
     updates.push("content = ?");
     values.push(content);
   }
+  if (title !== null) {
+    updates.push("title = ?");
+    values.push(title);
+  }
   if (imageUrls !== null) {
     updates.push("image_urls = ?");
     values.push(JSON.stringify(imageUrls));
   }
+  if (isPublic !== null) {
+    updates.push("is_public = ?");
+    values.push(isPublic);
+  }
   values.push(id);
-  await c.env.molian_db.prepare(`UPDATE posts SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
+  try {
+    await c.env.molian_db.prepare(`UPDATE posts SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
+  } catch (e) {
+    if (isSchemaError(e)) {
+      if (title !== null || isPublic !== null) {
+        updates.length = 1;
+        values.length = 0;
+        if (content !== null) {
+          updates.push("content = ?");
+          values.push(content);
+        }
+        if (imageUrls !== null) {
+          updates.push("image_urls = ?");
+          values.push(JSON.stringify(imageUrls));
+        }
+        values.push(id);
+        await c.env.molian_db.prepare(`UPDATE posts SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
+      }
+    } else throw e;
+  }
+  if (communityIds !== null) {
+    try {
+      await c.env.molian_db.prepare("DELETE FROM post_communities WHERE post_id = ?").bind(id).run();
+      for (const cid of communityIds) {
+        await c.env.molian_db.prepare("INSERT OR IGNORE INTO post_communities (post_id, community_id) VALUES (?, ?)").bind(id, cid).run();
+      }
+    } catch (_) {}
+  }
   const updatedRow = (await c.env.molian_db.prepare(
     `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id = ?`
   )
     .bind(id)
     .first()) as Record<string, unknown> | null;
   if (!updatedRow) return c.json({ error: "更新失败" }, 500, corsHeaders());
+  let finalCommunityIds: string[] = [];
+  try {
+    const pc = await c.env.molian_db.prepare("SELECT community_id FROM post_communities WHERE post_id = ?").bind(id).all();
+    finalCommunityIds = (pc.results as { community_id: string }[]).map((x) => x.community_id);
+  } catch (_) {}
   const post = {
     id: updatedRow.id,
     user_id: updatedRow.user_id,
-    title: updatedRow.title,
+    title: updatedRow.title ?? "",
     content: updatedRow.content,
     image_urls: updatedRow.image_urls,
-    is_public: updatedRow.is_public,
+    is_public: updatedRow.is_public ?? 1,
+    community_ids: finalCommunityIds,
     created_at: updatedRow.created_at,
     updated_at: updatedRow.updated_at,
     user: { username: updatedRow.username, display_name: updatedRow.display_name, avatar_url: updatedRow.avatar_url },
@@ -1351,6 +1408,48 @@ app.get("/api/realms", async (c) => {
           (typeof r.description === "string" && (r.description as string).toLowerCase().includes(qLower))
       );
     }
+    if (userId && results.length > 0) {
+      const ids = results.map((r) => (r as { id: string }).id).filter(Boolean) as string[];
+      let joinedIds = new Set<string>();
+      let creatorIds = new Set<string>();
+      if (scope === "joined") {
+        joinedIds = new Set(ids);
+      } else {
+        try {
+          const placeholders = ids.map(() => "?").join(",");
+          const joinedRows = await c.env.molian_db.prepare(
+            `SELECT realm_id FROM realm_members WHERE user_id = ? AND realm_id IN (${placeholders})`
+          )
+            .bind(userId, ...ids)
+            .all();
+          joinedIds = new Set((joinedRows.results as { realm_id: string }[]).map((x) => x.realm_id));
+        } catch (_) {}
+      }
+      try {
+        const placeholders = ids.map(() => "?").join(",");
+        const creatorRows = await c.env.molian_db.prepare(
+          `SELECT id FROM realms WHERE creator_id = ? AND id IN (${placeholders})`
+        )
+          .bind(userId, ...ids)
+          .all();
+        creatorIds = new Set((creatorRows.results as { id: string }[]).map((x) => x.id));
+        try {
+          const legacyRows = await c.env.molian_db.prepare(
+            `SELECT id FROM realms WHERE creator_id IS NULL AND id IN (${placeholders})`
+          )
+            .bind(...ids)
+            .all();
+          for (const row of legacyRows.results as { id: string }[]) {
+            if (joinedIds.has(row.id)) creatorIds.add(row.id);
+          }
+        } catch (_) {}
+      } catch (_) {}
+      for (const r of results) {
+        const id = (r as { id?: string }).id;
+        (r as Record<string, unknown>).joined = id ? joinedIds.has(id) : false;
+        (r as Record<string, unknown>).is_creator = id ? creatorIds.has(id) : false;
+      }
+    }
     return c.json({ realms: results }, 200, corsHeaders());
   } catch (e) {
     const msg = e && typeof (e as { message?: string }).message === "string" ? (e as { message: string }).message : String(e);
@@ -1408,13 +1507,93 @@ app.post("/api/realms", async (c) => {
 
 app.get("/api/realms/:id", async (c) => {
   const id = c.req.param("id");
+  const userId = await getUserIdFromRequest(c);
   const row = await c.env.molian_db.prepare(
     "SELECT id, name, slug, description, avatar_url, created_at FROM realms WHERE id = ? OR slug = ?"
   )
     .bind(id, id)
     .first();
   if (!row || typeof row !== "object") return c.json({ error: "圈子不存在" }, 404, corsHeaders());
+  const r = row as Record<string, unknown>;
+  let joined = false;
+  let isCreator = false;
+  if (userId) {
+    const member = await c.env.molian_db.prepare("SELECT 1 FROM realm_members WHERE realm_id = ? AND user_id = ?").bind(r.id, userId).first();
+    joined = !!member;
+    try {
+      const realmRow = await c.env.molian_db.prepare("SELECT creator_id FROM realms WHERE id = ?").bind(r.id).first();
+      const creatorId = realmRow && typeof realmRow === "object" ? (realmRow as { creator_id?: string }).creator_id : undefined;
+      isCreator = creatorId === userId || (creatorId == null && !!member);
+    } catch (_) {
+      isCreator = !!member;
+    }
+  }
+  return c.json({ realm: { ...r, joined, is_creator: isCreator } }, 200, corsHeaders());
+});
+
+app.patch("/api/realms/:id", async (c) => {
+  const userId = await getUserIdFromRequest(c);
+  if (!userId) return c.json({ error: "未登录" }, 401, corsHeaders());
+  const id = c.req.param("id");
+  const realm = await c.env.molian_db.prepare("SELECT id, creator_id FROM realms WHERE id = ? OR slug = ?").bind(id, id).first();
+  if (!realm || typeof realm !== "object") return c.json({ error: "圈子不存在" }, 404, corsHeaders());
+  const rid = (realm as { id: string }).id;
+  const creatorId = (realm as { creator_id?: string }).creator_id;
+  let canEdit = creatorId === userId;
+  if (!canEdit && creatorId == null) {
+    const member = await c.env.molian_db.prepare("SELECT 1 FROM realm_members WHERE realm_id = ? AND user_id = ?").bind(rid, userId).first();
+    canEdit = !!member;
+  }
+  if (!canEdit) return c.json({ error: "只有创建者可编辑" }, 403, corsHeaders());
+  const body = (await c.req.json()) as { name?: string; slug?: string; description?: string };
+  const name = body?.name !== undefined ? String(body.name).trim() : null;
+  const slug = body?.slug !== undefined ? String(body.slug).trim() : null;
+  const description = body?.description !== undefined ? (body.description === null ? null : String(body.description).trim()) : undefined;
+  if (name === null && slug === null && description === undefined) return c.json({ error: "无有效更新字段" }, 400, corsHeaders());
+  if (name !== null && !name) return c.json({ error: "圈子名称不能为空" }, 400, corsHeaders());
+  const updates: string[] = [];
+  const values: unknown[] = [];
+  if (name !== null) {
+    updates.push("name = ?");
+    values.push(name);
+  }
+  if (slug !== null) {
+    updates.push("slug = ?");
+    values.push(slug);
+  }
+  if (description !== undefined) {
+    updates.push("description = ?");
+    values.push(description);
+  }
+  if (updates.length === 0) return c.json({ error: "无有效更新字段" }, 400, corsHeaders());
+  values.push(rid);
+  await c.env.molian_db.prepare(`UPDATE realms SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
+  const row = await c.env.molian_db.prepare(`SELECT ${realmsSelectColumns} FROM realms WHERE id = ?`).bind(rid).first();
   return c.json({ realm: row }, 200, corsHeaders());
+});
+
+app.delete("/api/realms/:id", async (c) => {
+  const userId = await getUserIdFromRequest(c);
+  if (!userId) return c.json({ error: "未登录" }, 401, corsHeaders());
+  const id = c.req.param("id");
+  const realm = await c.env.molian_db.prepare("SELECT id, creator_id FROM realms WHERE id = ? OR slug = ?").bind(id, id).first();
+  if (!realm || typeof realm !== "object") return c.json({ error: "圈子不存在" }, 404, corsHeaders());
+  const rid = (realm as { id: string }).id;
+  const creatorId = (realm as { creator_id?: string }).creator_id;
+  let canDelete = creatorId === userId;
+  if (!canDelete && creatorId == null) {
+    const member = await c.env.molian_db.prepare("SELECT 1 FROM realm_members WHERE realm_id = ? AND user_id = ?").bind(rid, userId).first();
+    canDelete = !!member;
+  }
+  if (!canDelete) return c.json({ error: "只有创建者可删除" }, 403, corsHeaders());
+  try {
+    await c.env.molian_db.prepare("DELETE FROM post_communities WHERE community_id = ?").bind(rid).run();
+    await c.env.molian_db.prepare("DELETE FROM realm_members WHERE realm_id = ?").bind(rid).run();
+    await c.env.molian_db.prepare("DELETE FROM realms WHERE id = ?").bind(rid).run();
+    return c.json({ deleted: true }, 200, corsHeaders());
+  } catch (e) {
+    return c.json({ error: "删除失败" }, 500, corsHeaders());
+  }
 });
 
 // 圈子页帖子列表：仅通过 post_communities 关联的帖子（含 only 与 public+圈子）

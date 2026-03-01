@@ -8,7 +8,6 @@ import '../../features/auth/presentation/register_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/create_post/create_post_page.dart';
 import '../../features/posts/data/models/post_model.dart';
-import '../../features/posts/presentation/create_post_screen.dart';
 import '../../features/posts/presentation/post_comments_screen.dart';
 import '../../features/posts/presentation/post_detail_screen.dart';
 import '../../features/direct/presentation/direct_to_chat_redirect_screen.dart';
@@ -99,7 +98,7 @@ GoRouter createAppRouter() {
         builder: (BuildContext context, GoRouterState state) {
           final String id = state.pathParameters['id'] ?? '';
           final PostModel? post = state.extra as PostModel?;
-          return CreatePostScreen(postId: id, initialPost: post);
+          return CreatePostPage(postId: id, initialPost: post);
         },
       ),
       GoRoute(
