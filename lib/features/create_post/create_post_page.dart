@@ -331,7 +331,7 @@ class _CirclePickerSheetState extends ConsumerState<_CirclePickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final async = ref.watch(realmsListProvider(const RealmsListKey(scope: RealmsScope.all)));
+    final async = ref.watch(realmsListProvider(const RealmsListKey(scope: RealmsScope.joined)));
     final theme = Theme.of(context);
 
     return DraggableScrollableSheet(
@@ -369,10 +369,14 @@ class _CirclePickerSheetState extends ConsumerState<_CirclePickerSheet> {
                 data: (List<RealmModel> realms) {
                   if (realms.isEmpty) {
                     return Center(
-                      child: Text(
-                        '暂无圈子',
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                      child: Padding(
+                        padding: const EdgeInsets.all(LayoutConstants.kSpacingLarge),
+                        child: Text(
+                          '暂无已加入的圈子，请先加入圈子后再选择',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
                     );
@@ -418,7 +422,7 @@ class _CirclePickerSheetState extends ConsumerState<_CirclePickerSheet> {
                         Text(err.toString(), textAlign: TextAlign.center),
                         const SizedBox(height: LayoutConstants.kSpacingMedium),
                         TextButton(
-                          onPressed: () => ref.invalidate(realmsListProvider(const RealmsListKey(scope: RealmsScope.all))),
+                          onPressed: () => ref.invalidate(realmsListProvider(const RealmsListKey(scope: RealmsScope.joined))),
                           child: const Text('重试'),
                         ),
                       ],

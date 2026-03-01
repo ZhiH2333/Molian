@@ -463,6 +463,10 @@ app.post("/api/posts", async (c) => {
       const rid = (realm as { id: string }).id;
       if (!communityIds.includes(rid)) communityIds.push(rid);
     }
+    for (const rid of communityIds) {
+      const member = await c.env.molian_db.prepare("SELECT 1 FROM realm_members WHERE realm_id = ? AND user_id = ?").bind(rid, userId).first();
+      if (!member) return c.json({ error: "只能关联已加入的圈子" }, 400, corsHeaders());
+    }
     const imageUrls = Array.isArray(body?.image_urls) ? (body.image_urls as string[]) : [];
     const imageUrlsJson = JSON.stringify(imageUrls);
     const id = uuid();
@@ -635,9 +639,20 @@ app.patch("/api/posts/:id", async (c) => {
     } else throw e;
   }
   if (communityIds !== null) {
+    const resolvedIds: string[] = [];
+    for (const idOrSlug of communityIds) {
+      let realm = await c.env.molian_db.prepare("SELECT id FROM realms WHERE id = ?").bind(idOrSlug).first();
+      if (!realm || typeof realm !== "object")
+        realm = await c.env.molian_db.prepare("SELECT id FROM realms WHERE slug = ?").bind(idOrSlug).first();
+      if (!realm || typeof realm !== "object") return c.json({ error: `圈子不存在: ${idOrSlug}` }, 400, corsHeaders());
+      const rid = (realm as { id: string }).id;
+      const member = await c.env.molian_db.prepare("SELECT 1 FROM realm_members WHERE realm_id = ? AND user_id = ?").bind(rid, userId).first();
+      if (!member) return c.json({ error: "只能关联已加入的圈子" }, 400, corsHeaders());
+      if (!resolvedIds.includes(rid)) resolvedIds.push(rid);
+    }
     try {
       await c.env.molian_db.prepare("DELETE FROM post_communities WHERE post_id = ?").bind(id).run();
-      for (const cid of communityIds) {
+      for (const cid of resolvedIds) {
         await c.env.molian_db.prepare("INSERT OR IGNORE INTO post_communities (post_id, community_id) VALUES (?, ?)").bind(id, cid).run();
       }
     } catch (_) {}
