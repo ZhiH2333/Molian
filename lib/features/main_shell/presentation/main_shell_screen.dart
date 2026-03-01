@@ -14,6 +14,7 @@ import '../../auth/providers/auth_providers.dart';
 import '../../chat/presentation/chat_rooms_list_screen.dart';
 import '../../posts/presentation/home_screen.dart';
 import '../../profile/presentation/profile_screen.dart';
+import '../../realms/presentation/realms_screen.dart';
 
 /// 宽屏左侧导航栏样式常量
 class _RailStyle {
@@ -28,7 +29,7 @@ class _RailStyle {
   static const double titlePaddingLeft = 24;
 }
 
-/// 主壳：窄屏底部 NavigationBar，宽屏（≥768）左侧 NavigationRail；「浏览、聊天、个人」。
+/// 主壳：窄屏底部 NavigationBar，宽屏（≥768）左侧 NavigationRail；「浏览、圈子、聊天、个人」。
 class MainShellScreen extends ConsumerStatefulWidget {
   const MainShellScreen({super.key});
 
@@ -46,6 +47,11 @@ class _MainShellScreenState extends ConsumerState<MainShellScreen> {
       selectedIcon: Icons.explore,
     ),
     _NavItem(
+      label: '圈子',
+      icon: Icons.people_outline,
+      selectedIcon: Icons.people,
+    ),
+    _NavItem(
       label: '聊天',
       icon: Icons.chat_bubble_outline,
       selectedIcon: Icons.chat_bubble,
@@ -58,7 +64,7 @@ class _MainShellScreenState extends ConsumerState<MainShellScreen> {
   ];
 
   void _onDestinationSelected(int index, UserModel? user) {
-    if (index == 1 || index == 2) {
+    if (index == 1 || index == 2 || index == 3) {
       if (user == null) {
         context.go(AppRoutes.login);
         return;
@@ -78,6 +84,7 @@ class _MainShellScreenState extends ConsumerState<MainShellScreen> {
           index: _currentIndex,
           children: const <Widget>[
             HomeScreen(inShell: true),
+            RealmsScreen(inShell: true),
             ChatRoomsListScreen(),
             ProfileScreen(inShell: true),
           ],

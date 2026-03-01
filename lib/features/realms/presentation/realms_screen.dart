@@ -14,7 +14,10 @@ import '../providers/realms_providers.dart';
 
 /// 圈子列表，接入 /api/realms；点击进入详情并可加入/退出。
 class RealmsScreen extends ConsumerWidget {
-  const RealmsScreen({super.key});
+  const RealmsScreen({super.key, this.inShell = false});
+
+  /// 是否嵌入主壳；为 true 时不显示左上角返回按钮。
+  final bool inShell;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -23,7 +26,7 @@ class RealmsScreen extends ConsumerWidget {
       isNoBackground: wide,
       isWideScreen: wide,
       appBar: AppBar(
-        leading: const AutoLeadingButton(),
+        leading: inShell ? null : const AutoLeadingButton(),
         title: const Text('圈子'),
       ),
       body: Consumer(
