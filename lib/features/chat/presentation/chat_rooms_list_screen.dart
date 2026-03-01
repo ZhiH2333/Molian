@@ -96,8 +96,65 @@ class _ChatRoomsListScreenState extends ConsumerState<ChatRoomsListScreen>
 class _ConversationsTab extends ConsumerWidget {
   const _ConversationsTab();
 
+  /// 私聊时显示对方名称与头像，群聊用 room 的 name/avatarUrl。
+  static String _roomDisplayTitle(ChatRoom room, String? myUserId) {
+    if (room.isDirect && room.members.isNotEmpty && myUserId != null) {
+      final other = room.members
+          .where((ChatRoomMember m) => m.userId != myUserId)
+          .firstOrNull;
+      if (other != null) {
+        final dn = other.displayName?.trim();
+        if (dn != null && dn.isNotEmpty) return dn;
+      }
+    }
+    return room.name.isNotEmpty ? room.name : room.id;
+  }
+
+  static String? _roomDisplayAvatarUrl(ChatRoom room, String? myUserId) {
+    if (room.avatarUrl != null && room.avatarUrl!.isNotEmpty) return room.avatarUrl;
+    if (room.isDirect && room.members.isNotEmpty && myUserId != null) {
+      final other = room.members
+          .where((ChatRoomMember m) => m.userId != myUserId)
+          .firstOrNull;
+      if (other?.avatarUrl != null && other!.avatarUrl!.isNotEmpty) return other.avatarUrl;
+    }
+    return null;
+  }
+
+  static String? _formatLastMessageTime(String isoString) {
+    try {
+      final dt = DateTime.parse(isoString);
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final yesterday = today.subtract(const Duration(days: 1));
+      final date = DateTime(dt.year, dt.month, dt.day);
+      final h = dt.hour.toString().padLeft(2, '0');
+      final m = dt.minute.toString().padLeft(2, '0');
+      if (date == today) return '今天 $h:$m';
+      if (date == yesterday) return '昨天 $h:$m';
+      if (dt.year == now.year) return '${dt.month}月${dt.day}日';
+      return '${dt.year}年${dt.month}月${dt.day}日';
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static String? _roomSubtitle(ChatRoom room) {
+    final text = room.lastMessageText?.trim();
+    if (text != null && text.isNotEmpty) {
+      const int maxLen = 40;
+      return text.length <= maxLen ? text : '${text.substring(0, maxLen)}…';
+    }
+    if (room.lastMessageAt != null) {
+      return _formatLastMessageTime(room.lastMessageAt!);
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final me = ref.watch(authStateProvider).valueOrNull;
+    final myUserId = me?.id;
     final roomsAsync = ref.watch(chatRoomListProvider);
     return roomsAsync.when(
       data: (List<ChatRoom> rooms) {
@@ -120,14 +177,14 @@ class _ConversationsTab extends ConsumerWidget {
           itemCount: rooms.length,
           itemBuilder: (BuildContext context, int index) {
             final room = rooms[index];
-            final title = room.name.isNotEmpty ? room.name : room.id;
+            final title = _roomDisplayTitle(room, myUserId);
+            final avatarUrl = _roomDisplayAvatarUrl(room, myUserId);
+            final subtitle = _roomSubtitle(room);
             return ListTile(
               leading: CircleAvatar(
                 backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
-                backgroundImage: room.avatarUrl != null && room.avatarUrl!.isNotEmpty
-                    ? NetworkImage(room.avatarUrl!)
-                    : null,
-                child: room.avatarUrl == null || room.avatarUrl!.isEmpty
+                backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                child: avatarUrl == null
                     ? Text(
                         title.isNotEmpty ? title[0].toUpperCase() : '?',
                         style: TextStyle(
@@ -137,9 +194,7 @@ class _ConversationsTab extends ConsumerWidget {
                     : null,
               ),
               title: Text(title),
-              subtitle: room.lastMessageAt != null
-                  ? Text(room.lastMessageAt!)
-                  : null,
+              subtitle: subtitle != null ? Text(subtitle) : null,
               onTap: () => context.push(
                 AppRoutes.chatRoom(room.id),
                 extra: <String, String>{'title': title},
