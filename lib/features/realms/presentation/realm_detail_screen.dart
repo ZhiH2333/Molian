@@ -185,12 +185,27 @@ class _RealmDetailScreenState extends ConsumerState<RealmDetailScreen> {
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: LayoutConstants.kSpacingXLarge),
                   sliver: SliverToBoxAdapter(
-                    child: Text(
-                      '圈子帖子',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: Theme.of(context).colorScheme.onSurface,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          '圈子帖子',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
+                        ),
+                        if (!displayJoined)
+                          Padding(
+                            padding: const EdgeInsets.only(top: LayoutConstants.kSpacingSmall),
+                            child: Text(
+                              '加入圈子后可查看「仅圈子可见」的帖子',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Theme.of(context).colorScheme.outline,
+                                  ),
+                            ),
                           ),
+                      ],
                     ),
                   ),
                 ),

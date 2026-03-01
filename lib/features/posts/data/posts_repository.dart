@@ -50,20 +50,25 @@ class PostsRepository {
     bool isPublic = true,
     List<String>? communityIds,
   }) async {
-    final response = await _dio.post<Map<String, dynamic>>(
-      ApiConstants.posts,
-      data: <String, dynamic>{
-        'title': title,
-        'content': content,
-        'is_public': isPublic,
-        if (imageUrls != null && imageUrls.isNotEmpty) 'image_urls': imageUrls,
-        if (communityIds != null && communityIds.isNotEmpty)
-          'community_ids': communityIds,
-      },
-    );
-    final data = response.data;
-    if (data == null || data['post'] == null) throw Exception('发布响应异常');
-    return PostModel.fromJson(data['post'] as Map<String, dynamic>);
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        ApiConstants.posts,
+        data: <String, dynamic>{
+          'title': title,
+          'content': content,
+          'is_public': isPublic,
+          if (imageUrls != null && imageUrls.isNotEmpty) 'image_urls': imageUrls,
+          if (communityIds != null && communityIds.isNotEmpty)
+            'community_ids': communityIds,
+        },
+      );
+      final data = response.data;
+      if (data == null || data['post'] == null) throw Exception('发布响应异常');
+      return PostModel.fromJson(data['post'] as Map<String, dynamic>);
+    } on DioException catch (e) {
+      final msg = _messageFromDioException(e);
+      throw Exception(msg);
+    }
   }
 
   Future<PostModel?> getPost(String id) async {
@@ -93,10 +98,29 @@ class PostsRepository {
     if (communityIds != null) data['community_ids'] = communityIds;
     if (imageUrls != null) data['image_urls'] = imageUrls;
     if (data.isEmpty) throw Exception('无有效更新字段');
-    final response = await _dio.patch<Map<String, dynamic>>('${ApiConstants.posts}/$id', data: data);
-    final responseData = response.data;
-    if (responseData == null || responseData['post'] == null) throw Exception('更新响应异常');
-    return PostModel.fromJson(responseData['post'] as Map<String, dynamic>);
+    try {
+      final response = await _dio.patch<Map<String, dynamic>>('${ApiConstants.posts}/$id', data: data);
+      final responseData = response.data;
+      if (responseData == null || responseData['post'] == null) throw Exception('更新响应异常');
+      return PostModel.fromJson(responseData['post'] as Map<String, dynamic>);
+    } on DioException catch (e) {
+      final msg = _messageFromDioException(e);
+      throw Exception(msg);
+    }
+  }
+
+  /// 从 Dio 错误中解析可读信息：优先使用服务端 error/message，404 时给出友好提示。
+  static String _messageFromDioException(DioException e) {
+    final code = e.response?.statusCode;
+    final body = e.response?.data;
+    if (body is Map<String, dynamic>) {
+      final err = body['error'] as String? ?? body['message'] as String?;
+      if (err != null && err.isNotEmpty) return err;
+    }
+    if (code == 404) return '接口不存在(404)，请检查 API 地址或稍后重试';
+    if (code == 401) return '未登录或登录已过期，请重新登录';
+    if (code != null && code >= 400) return '请求失败($code)';
+    return e.message ?? '网络错误';
   }
 
   /// 删除帖子，仅发布者有权删除。

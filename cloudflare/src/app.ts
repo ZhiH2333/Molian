@@ -453,12 +453,15 @@ app.post("/api/posts", async (c) => {
     if (!content) return c.json({ error: "内容不能为空" }, 400, corsHeaders());
     const title = String(body?.title ?? "").trim();
     const isPublic = body?.is_public !== false ? 1 : 0;
-    const communityIds = Array.isArray(body?.community_ids) ? (body.community_ids as string[]) : [];
-    if (communityIds.length > 0) {
-      for (const rid of communityIds) {
-        const realm = await c.env.molian_db.prepare("SELECT id FROM realms WHERE id = ?").bind(rid).first();
-        if (!realm) return c.json({ error: `圈子不存在: ${rid}` }, 400, corsHeaders());
-      }
+    const rawCommunityIds = Array.isArray(body?.community_ids) ? (body.community_ids as string[]) : [];
+    const communityIds: string[] = [];
+    for (const idOrSlug of rawCommunityIds) {
+      let realm = await c.env.molian_db.prepare("SELECT id FROM realms WHERE id = ?").bind(idOrSlug).first();
+      if (!realm || typeof realm !== "object")
+        realm = await c.env.molian_db.prepare("SELECT id FROM realms WHERE slug = ?").bind(idOrSlug).first();
+      if (!realm || typeof realm !== "object") return c.json({ error: `圈子不存在: ${idOrSlug}` }, 400, corsHeaders());
+      const rid = (realm as { id: string }).id;
+      if (!communityIds.includes(rid)) communityIds.push(rid);
     }
     const imageUrls = Array.isArray(body?.image_urls) ? (body.image_urls as string[]) : [];
     const imageUrlsJson = JSON.stringify(imageUrls);
@@ -1596,7 +1599,7 @@ app.delete("/api/realms/:id", async (c) => {
   }
 });
 
-// 圈子页帖子列表：仅通过 post_communities 关联的帖子（含 only 与 public+圈子）
+// 圈子页帖子列表：仅通过 post_communities 关联的帖子。未加入圈子时只返回「全站可见」帖子，加入后可看「仅圈子可见」。
 app.get("/api/realms/:id/posts", async (c) => {
   const realmId = c.req.param("id");
   const limit = Math.min(Number(c.req.query("limit")) || 20, 100);
@@ -1605,28 +1608,37 @@ app.get("/api/realms/:id/posts", async (c) => {
   const realm = await c.env.molian_db.prepare("SELECT id FROM realms WHERE id = ? OR slug = ?").bind(realmId, realmId).first();
   if (!realm || typeof realm !== "object") return c.json({ error: "圈子不存在" }, 404, corsHeaders());
   const rid = (realm as { id: string }).id;
+  const isMember = !!userId && !!(await c.env.molian_db.prepare("SELECT 1 FROM realm_members WHERE realm_id = ? AND user_id = ?").bind(rid, userId).first());
+  const publicOnly = !isMember;
   let results: Record<string, unknown>[];
   if (cursor) {
-    const cursorRow = await c.env.molian_db.prepare("SELECT p.created_at FROM posts p JOIN post_communities pc ON p.id = pc.post_id WHERE pc.community_id = ? AND p.id = ?").bind(rid, cursor).first();
+    const cursorRow = await c.env.molian_db.prepare(
+      publicOnly
+        ? "SELECT p.created_at FROM posts p JOIN post_communities pc ON p.id = pc.post_id WHERE pc.community_id = ? AND p.is_public = 1 AND p.id = ?"
+        : "SELECT p.created_at FROM posts p JOIN post_communities pc ON p.id = pc.post_id WHERE pc.community_id = ? AND p.id = ?"
+    ).bind(rid, cursor).first();
     const cursorCreated = cursorRow && typeof cursorRow === "object" ? (cursorRow as Record<string, unknown>).created_at : null;
     if (cursorCreated) {
+      const whereClause = publicOnly ? "pc.community_id = ? AND p.is_public = 1 AND p.created_at < ?" : "pc.community_id = ? AND p.created_at < ?";
       const s = await c.env.molian_db.prepare(
-        `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id JOIN post_communities pc ON p.id = pc.post_id WHERE pc.community_id = ? AND p.created_at < ? ORDER BY p.created_at DESC LIMIT ?`
+        `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id JOIN post_communities pc ON p.id = pc.post_id WHERE ${whereClause} ORDER BY p.created_at DESC LIMIT ?`
       )
         .bind(rid, cursorCreated, limit)
         .all();
       results = s.results as Record<string, unknown>[];
     } else {
+      const whereClause = publicOnly ? "pc.community_id = ? AND p.is_public = 1" : "pc.community_id = ?";
       const s = await c.env.molian_db.prepare(
-        `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id JOIN post_communities pc ON p.id = pc.post_id WHERE pc.community_id = ? ORDER BY p.created_at DESC LIMIT ?`
+        `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id JOIN post_communities pc ON p.id = pc.post_id WHERE ${whereClause} ORDER BY p.created_at DESC LIMIT ?`
       )
         .bind(rid, limit)
         .all();
       results = s.results as Record<string, unknown>[];
     }
   } else {
+    const whereClause = publicOnly ? "pc.community_id = ? AND p.is_public = 1" : "pc.community_id = ?";
     const s = await c.env.molian_db.prepare(
-      `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id JOIN post_communities pc ON p.id = pc.post_id WHERE pc.community_id = ? ORDER BY p.created_at DESC LIMIT ?`
+      `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id JOIN post_communities pc ON p.id = pc.post_id WHERE ${whereClause} ORDER BY p.created_at DESC LIMIT ?`
     )
       .bind(rid, limit)
       .all();
