@@ -6,6 +6,7 @@ import '../../features/chat/presentation/chat_room_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/create_post/create_post_page.dart';
 import '../../features/posts/data/models/post_model.dart';
 import '../../features/posts/presentation/create_post_screen.dart';
 import '../../features/posts/presentation/post_comments_screen.dart';
@@ -79,7 +80,7 @@ GoRouter createAppRouter() {
       GoRoute(
         path: AppRoutes.createPost,
         builder: (BuildContext context, GoRouterState state) =>
-            const CreatePostScreen(),
+            const CreatePostPage(),
       ),
       GoRoute(
         path: '/posts/:id',

@@ -43,12 +43,22 @@ class PostsRepository {
     return PostsPageResult(posts: list, nextCursor: nextCursor);
   }
 
-  Future<PostModel> createPost({required String content, List<String>? imageUrls}) async {
+  Future<PostModel> createPost({
+    required String title,
+    required String content,
+    List<String>? imageUrls,
+    bool isPublic = true,
+    List<String>? communityIds,
+  }) async {
     final response = await _dio.post<Map<String, dynamic>>(
       ApiConstants.posts,
       data: <String, dynamic>{
+        'title': title,
         'content': content,
+        'is_public': isPublic,
         if (imageUrls != null && imageUrls.isNotEmpty) 'image_urls': imageUrls,
+        if (communityIds != null && communityIds.isNotEmpty)
+          'community_ids': communityIds,
       },
     );
     final data = response.data;
