@@ -20,8 +20,10 @@ import '../../features/notifications/presentation/notifications_screen.dart';
 import '../../features/main_shell/presentation/main_shell_screen.dart';
 import '../../features/social/presentation/social_screen.dart';
 import '../../features/realms/data/models/realm_model.dart';
+import '../../features/realms/presentation/create_realm_screen.dart';
 import '../../features/realms/presentation/realm_detail_screen.dart';
 import '../../features/realms/presentation/realms_screen.dart';
+import '../../features/realms/presentation/realms_search_screen.dart';
 import '../../features/settings/presentation/account_privacy_screen.dart';
 import '../../features/settings/presentation/push_settings_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
@@ -40,6 +42,8 @@ class AppRoutes {
   static const String friendRequests = '/friend-requests';
   static const String explore = '/explore';
   static const String realms = '/realms';
+  static const String realmsCreate = '/realms/create';
+  static const String realmsSearch = '/realms/search';
   static String realmDetail(String id) => '/realms/$id';
   static const String files = '/files';
   static const String notifications = '/notifications';
@@ -139,14 +143,26 @@ GoRouter createAppRouter() {
         path: AppRoutes.realms,
         builder: (BuildContext context, GoRouterState state) =>
             const RealmsScreen(),
-      ),
-      GoRoute(
-        path: '/realms/:id',
-        builder: (BuildContext context, GoRouterState state) {
-          final id = state.pathParameters['id'] ?? '';
-          final realm = state.extra as RealmModel?;
-          return RealmDetailScreen(realmId: id, initialRealm: realm);
-        },
+        routes: <RouteBase>[
+          GoRoute(
+            path: 'create',
+            builder: (BuildContext context, GoRouterState state) =>
+                const CreateRealmScreen(),
+          ),
+          GoRoute(
+            path: 'search',
+            builder: (BuildContext context, GoRouterState state) =>
+                const RealmsSearchScreen(),
+          ),
+          GoRoute(
+            path: ':id',
+            builder: (BuildContext context, GoRouterState state) {
+              final id = state.pathParameters['id'] ?? '';
+              final realm = state.extra as RealmModel?;
+              return RealmDetailScreen(realmId: id, initialRealm: realm);
+            },
+          ),
+        ],
       ),
       GoRoute(
         path: AppRoutes.files,

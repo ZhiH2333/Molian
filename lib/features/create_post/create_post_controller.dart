@@ -16,6 +16,10 @@ class CreatePostController extends Notifier<CreatePostState> {
     state = state.copyWith(title: value, errorMessage: null);
   }
 
+  void setDescription(String value) {
+    state = state.copyWith(description: value, errorMessage: null);
+  }
+
   void setContent(String value) {
     state = state.copyWith(content: value, errorMessage: null);
   }
@@ -37,9 +41,11 @@ class CreatePostController extends Notifier<CreatePostState> {
 
   Future<bool> submit() async {
     final title = state.title.trim();
-    final content = state.content.trim();
+    final description = state.description.trim();
+    final body = state.content.trim();
+    final content = description.isEmpty ? body : (body.isEmpty ? description : '$description\n$body');
     if (content.isEmpty) {
-      state = state.copyWith(errorMessage: '请填写内容');
+      state = state.copyWith(errorMessage: '请填写内容或描述');
       return false;
     }
     final ids = state.selectedCommunityIds;

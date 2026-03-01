@@ -7,6 +7,7 @@ import '../../core/router/app_router.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/auto_leading_button.dart';
 import '../realms/data/models/realm_model.dart';
+import '../realms/data/realms_repository.dart';
 import '../realms/providers/realms_providers.dart';
 import 'create_post_controller.dart';
 
@@ -21,22 +22,27 @@ class CreatePostPage extends ConsumerStatefulWidget {
 class _CreatePostPageState extends ConsumerState<CreatePostPage> {
   final _formKey = GlobalKey<FormState>();
   final _titleFocus = FocusNode();
+  final _descriptionFocus = FocusNode();
   final _contentFocus = FocusNode();
   late final TextEditingController _titleController;
+  late final TextEditingController _descriptionController;
   late final TextEditingController _contentController;
 
   @override
   void initState() {
     super.initState();
     _titleController = TextEditingController();
+    _descriptionController = TextEditingController();
     _contentController = TextEditingController();
   }
 
   @override
   void dispose() {
     _titleFocus.dispose();
+    _descriptionFocus.dispose();
     _contentFocus.dispose();
     _titleController.dispose();
+    _descriptionController.dispose();
     _contentController.dispose();
     super.dispose();
   }
@@ -130,6 +136,34 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
               maxLines: 1,
               enabled: !state.isLoading,
               textInputAction: TextInputAction.next,
+              onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_descriptionFocus),
+            ),
+            const SizedBox(height: LayoutConstants.kSpacingLarge),
+            TextFormField(
+              controller: _descriptionController,
+              onChanged: ref.read(createPostControllerProvider.notifier).setDescription,
+              focusNode: _descriptionFocus,
+              decoration: InputDecoration(
+                labelText: '描述',
+                hintText: '选填',
+                alignLabelWithHint: true,
+                filled: true,
+                border: OutlineInputBorder(
+                  borderRadius: LayoutConstants.kRadiusMediumBR,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: LayoutConstants.kRadiusMediumBR,
+                  borderSide: BorderSide(color: colorScheme.outlineVariant),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: LayoutConstants.kRadiusMediumBR,
+                  borderSide: BorderSide(color: colorScheme.primary, width: 2),
+                ),
+              ),
+              style: theme.textTheme.bodyLarge,
+              maxLines: 2,
+              enabled: !state.isLoading,
+              textInputAction: TextInputAction.next,
               onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_contentFocus),
             ),
             const SizedBox(height: LayoutConstants.kSpacingLarge),
@@ -159,7 +193,9 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
               minLines: 3,
               enabled: !state.isLoading,
               validator: (String? v) {
-                if ((v ?? '').trim().isEmpty) return '请填写内容';
+                final body = (v ?? '').trim();
+                final desc = ref.read(createPostControllerProvider).description.trim();
+                if (body.isEmpty && desc.isEmpty) return '请填写描述或内容';
                 return null;
               },
             ),
@@ -248,7 +284,7 @@ class _CirclePickerSheetState extends ConsumerState<_CirclePickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final async = ref.watch(realmsListProvider);
+    final async = ref.watch(realmsListProvider(const RealmsListKey(scope: RealmsScope.all)));
     final theme = Theme.of(context);
 
     return DraggableScrollableSheet(
@@ -335,7 +371,7 @@ class _CirclePickerSheetState extends ConsumerState<_CirclePickerSheet> {
                         Text(err.toString(), textAlign: TextAlign.center),
                         const SizedBox(height: LayoutConstants.kSpacingMedium),
                         TextButton(
-                          onPressed: () => ref.invalidate(realmsListProvider),
+                          onPressed: () => ref.invalidate(realmsListProvider(const RealmsListKey(scope: RealmsScope.all))),
                           child: const Text('重试'),
                         ),
                       ],

@@ -1300,16 +1300,109 @@ app.get("/api/feeds", async (c) => {
 });
 
 // ----- Realms -----
+const realmsSelectColumns = "id, name, slug, description, avatar_url, created_at";
+
 app.get("/api/realms", async (c) => {
+  const scope = c.req.query("scope") ?? "all"; // joined | mine | all
+  const q = (c.req.query("q") ?? "").trim();
+  const userId = await getUserIdFromRequest(c);
   try {
-    const { results } = await c.env.molian_db.prepare(
-      "SELECT id, name, slug, description, avatar_url, created_at FROM realms ORDER BY created_at DESC LIMIT 50"
-    ).all();
+    let results: Record<string, unknown>[];
+    if (scope === "joined" && userId) {
+      const stmt = await c.env.molian_db.prepare(
+        `SELECT r.id, r.name, r.slug, r.description, r.avatar_url, r.created_at FROM realms r INNER JOIN realm_members rm ON r.id = rm.realm_id WHERE rm.user_id = ? ORDER BY r.created_at DESC LIMIT 50`
+      ).bind(userId).all();
+      results = stmt.results as Record<string, unknown>[];
+    } else if (scope === "mine" && userId) {
+      try {
+        const stmt = await c.env.molian_db.prepare(
+          `SELECT ${realmsSelectColumns} FROM realms WHERE creator_id = ? ORDER BY created_at DESC LIMIT 50`
+        ).bind(userId).all();
+        results = stmt.results as Record<string, unknown>[];
+      } catch (e) {
+        if (isSchemaError(e)) results = [];
+        else throw e;
+      }
+    } else {
+      if (q.length > 0) {
+        const term = `%${q}%`;
+        try {
+          const stmt = await c.env.molian_db.prepare(
+            `SELECT ${realmsSelectColumns} FROM realms WHERE name LIKE ? OR slug LIKE ? OR description LIKE ? ORDER BY created_at DESC LIMIT 50`
+          ).bind(term, term, term).all();
+          results = stmt.results as Record<string, unknown>[];
+        } catch (e) {
+          if (isSchemaError(e)) results = [];
+          else throw e;
+        }
+      } else {
+        const stmt = await c.env.molian_db.prepare(
+          `SELECT ${realmsSelectColumns} FROM realms ORDER BY created_at DESC LIMIT 50`
+        ).all();
+        results = stmt.results as Record<string, unknown>[];
+      }
+    }
+    if (q.length > 0 && scope !== "all") {
+      const qLower = q.toLowerCase();
+      results = results.filter(
+        (r) =>
+          (typeof r.name === "string" && (r.name as string).toLowerCase().includes(qLower)) ||
+          (typeof r.slug === "string" && (r.slug as string).toLowerCase().includes(qLower)) ||
+          (typeof r.description === "string" && (r.description as string).toLowerCase().includes(qLower))
+      );
+    }
     return c.json({ realms: results }, 200, corsHeaders());
   } catch (e) {
     const msg = e && typeof (e as { message?: string }).message === "string" ? (e as { message: string }).message : String(e);
     if (msg.includes("no such table")) return c.json({ realms: [] }, 200, corsHeaders());
     return c.json({ error: "获取失败" }, 500, corsHeaders());
+  }
+});
+
+app.post("/api/realms", async (c) => {
+  const userId = await getUserIdFromRequest(c);
+  if (!userId) return c.json({ error: "未登录" }, 401, corsHeaders());
+  try {
+    const body = (await c.req.json()) as { name?: string; slug?: string; description?: string };
+    const name = String(body?.name ?? "").trim();
+    if (!name) return c.json({ error: "圈子名称不能为空" }, 400, corsHeaders());
+    const description = typeof body?.description === "string" ? body.description.trim() : null;
+    let slug = typeof body?.slug === "string" ? body.slug.trim() : "";
+    if (!slug) slug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9\u4e00-\u9fa5-]/g, "") || uuid();
+    const id = uuid();
+    const doInsert = async (s: string) => {
+      try {
+        await c.env.molian_db.prepare(
+          "INSERT INTO realms (id, name, slug, description, creator_id, created_at) VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+        ).bind(id, name, s, description ?? null, userId).run();
+        return true;
+      } catch (e) {
+        if (!isSchemaError(e)) throw e;
+        await c.env.molian_db.prepare(
+          "INSERT INTO realms (id, name, slug, description, created_at) VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+        ).bind(id, name, s, description ?? null).run();
+        return true;
+      }
+    };
+    try {
+      await doInsert(slug);
+    } catch (e) {
+      const msg = e && typeof (e as { message?: string }).message === "string" ? (e as { message: string }).message : String(e);
+      if (msg.includes("UNIQUE constraint failed")) {
+        slug = `${slug}-${id.slice(0, 8)}`;
+        await doInsert(slug);
+      } else {
+        throw e;
+      }
+    }
+    const row = await c.env.molian_db.prepare(
+      `SELECT ${realmsSelectColumns} FROM realms WHERE id = ?`
+    ).bind(id).first();
+    return c.json({ realm: row }, 200, corsHeaders());
+  } catch (e) {
+    const msg = e && typeof (e as { message?: string }).message === "string" ? (e as { message: string }).message : String(e);
+    if (msg.includes("UNIQUE constraint failed")) return c.json({ error: "该 slug 已被使用" }, 400, corsHeaders());
+    return c.json({ error: "创建失败" }, 500, corsHeaders());
   }
 });
 

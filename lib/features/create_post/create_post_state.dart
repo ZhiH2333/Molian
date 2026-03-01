@@ -1,7 +1,8 @@
-/// 发布帖子页状态：标题、内容、已选圈子、仅圈子可见、加载与错误。
+/// 发布帖子页状态：标题、描述、内容、已选圈子、仅圈子可见、加载与错误。
 class CreatePostState {
   const CreatePostState({
     this.title = '',
+    this.description = '',
     this.content = '',
     this.selectedCommunityIds = const [],
     this.isCircleOnly = false,
@@ -10,6 +11,7 @@ class CreatePostState {
   });
 
   final String title;
+  final String description;
   final String content;
   final List<String> selectedCommunityIds;
   final bool isCircleOnly;
@@ -24,6 +26,7 @@ class CreatePostState {
 
   CreatePostState copyWith({
     String? title,
+    String? description,
     String? content,
     List<String>? selectedCommunityIds,
     bool? isCircleOnly,
@@ -32,6 +35,7 @@ class CreatePostState {
   }) {
     return CreatePostState(
       title: title ?? this.title,
+      description: description ?? this.description,
       content: content ?? this.content,
       selectedCommunityIds: selectedCommunityIds ?? this.selectedCommunityIds,
       isCircleOnly: isCircleOnly ?? this.isCircleOnly,
