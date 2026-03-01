@@ -16,6 +16,10 @@ import '../data/posts_repository.dart';
 import '../providers/posts_providers.dart';
 import 'widgets/post_card.dart';
 
+/// 壳内已登录时 FAB 在 body 的 Stack 中绘制（避免被底部导航挡住），此时不使用 Scaffold 的 floatingActionButton。
+bool _shouldShowFabInShell(UserModel? user, bool inShell) =>
+    inShell && user != null;
+
 /// 首页：已登录显示发现流与发布 FAB，未登录显示登录/注册入口。
 /// 壳内时以 Tab 展示：发现、通知（圈子、文件已移至左侧菜单）。
 class HomeScreen extends ConsumerWidget {
@@ -54,28 +58,45 @@ class HomeScreen extends ConsumerWidget {
             return _buildGuestBody(context);
           }
           if (inShell) {
-            return DefaultTabController(
-              length: 2,
-              child: Column(
-                children: <Widget>[
-                  TabBar(
-                    isScrollable: true,
-                    tabAlignment: TabAlignment.start,
-                    tabs: const <Widget>[
-                      Tab(text: '发现'),
-                      Tab(text: '通知'),
+            final bottomInset = MediaQuery.paddingOf(context).bottom;
+            final fabBottom =
+                LayoutConstants.kBottomNavHeight +
+                bottomInset +
+                LayoutConstants.kFabMarginAboveBottomNav;
+            return Stack(
+              children: <Widget>[
+                DefaultTabController(
+                  length: 2,
+                  child: Column(
+                    children: <Widget>[
+                      TabBar(
+                        isScrollable: true,
+                        tabAlignment: TabAlignment.start,
+                        tabs: const <Widget>[
+                          Tab(text: '发现'),
+                          Tab(text: '通知'),
+                        ],
+                      ),
+                      Expanded(
+                        child: TabBarView(
+                          children: <Widget>[
+                            _FeedsTabContent(),
+                            _NotificationsTabContent(),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
-                  Expanded(
-                    child: TabBarView(
-                      children: <Widget>[
-                        _FeedsTabContent(),
-                        _NotificationsTabContent(),
-                      ],
-                    ),
+                ),
+                Positioned(
+                  right: LayoutConstants.kSpacingLarge,
+                  bottom: fabBottom,
+                  child: FloatingActionButton(
+                    onPressed: () => context.push(AppRoutes.createPost),
+                    child: const Icon(Icons.add),
                   ),
-                ],
-              ),
+                ),
+              ],
             );
           }
           return _FeedsTabContent();
@@ -90,12 +111,15 @@ class HomeScreen extends ConsumerWidget {
           ),
         ),
       ),
-      floatingActionButton: authState.valueOrNull != null
-          ? FloatingActionButton(
-              onPressed: () => context.push(AppRoutes.createPost),
-              child: const Icon(Icons.add),
-            )
-          : null,
+      floatingActionButton:
+          _shouldShowFabInShell(authState.valueOrNull, inShell)
+          ? null
+          : (authState.valueOrNull != null
+                ? FloatingActionButton(
+                    onPressed: () => context.push(AppRoutes.createPost),
+                    child: const Icon(Icons.add),
+                  )
+                : null),
     );
   }
 
@@ -142,15 +166,21 @@ class _FeedsTabContent extends ConsumerWidget {
         }
         final bottomPadding = MediaQuery.paddingOf(context).bottom + 64;
         return RefreshIndicator(
-          onRefresh: () async => ref.invalidate(feedsListProvider(const PostsListKey())),
+          onRefresh: () async =>
+              ref.invalidate(feedsListProvider(const PostsListKey())),
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: LayoutConstants.kContentMaxWidthWide),
+              constraints: const BoxConstraints(
+                maxWidth: LayoutConstants.kContentMaxWidthWide,
+              ),
               child: ListView.builder(
-                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
                 padding: EdgeInsets.only(bottom: bottomPadding),
                 itemCount: result.posts.length,
-                itemBuilder: (BuildContext context, int index) => PostCard(post: result.posts[index]),
+                itemBuilder: (BuildContext context, int index) =>
+                    PostCard(post: result.posts[index]),
               ),
             ),
           ),
@@ -164,7 +194,8 @@ class _FeedsTabContent extends ConsumerWidget {
             Text('加载失败: $err'),
             const SizedBox(height: 8),
             TextButton(
-              onPressed: () => ref.invalidate(feedsListProvider(const PostsListKey())),
+              onPressed: () =>
+                  ref.invalidate(feedsListProvider(const PostsListKey())),
               child: const Text('重试'),
             ),
           ],
@@ -179,7 +210,9 @@ class _NotificationsTabContent extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(notificationsListProvider(const NotificationsListKey()));
+    final async = ref.watch(
+      notificationsListProvider(const NotificationsListKey()),
+    );
     return async.when(
       data: (NotificationsPageResult result) {
         return Column(
@@ -193,7 +226,9 @@ class _NotificationsTabContent extends ConsumerWidget {
                   onPressed: () async {
                     final repo = ref.read(notificationsRepositoryProvider);
                     await repo.markRead();
-                    ref.invalidate(notificationsListProvider(const NotificationsListKey()));
+                    ref.invalidate(
+                      notificationsListProvider(const NotificationsListKey()),
+                    );
                   },
                   child: const Text('全部已读'),
                 ),
@@ -207,18 +242,28 @@ class _NotificationsTabContent extends ConsumerWidget {
                       icon: Icons.notifications_none_outlined,
                     )
                   : RefreshIndicator(
-                      onRefresh: () async => ref.invalidate(notificationsListProvider(const NotificationsListKey())),
+                      onRefresh: () async => ref.invalidate(
+                        notificationsListProvider(const NotificationsListKey()),
+                      ),
                       child: ListView.builder(
-                        padding: const EdgeInsets.only(bottom: LayoutConstants.kSpacingXLarge),
+                        padding: const EdgeInsets.only(
+                          bottom: LayoutConstants.kSpacingXLarge,
+                        ),
                         itemCount: result.notifications.length,
                         itemBuilder: (BuildContext context, int index) {
                           final n = result.notifications[index];
                           return _HomeNotificationTile(
                             notification: n,
                             onMarkRead: () async {
-                              final repo = ref.read(notificationsRepositoryProvider);
+                              final repo = ref.read(
+                                notificationsRepositoryProvider,
+                              );
                               await repo.markRead(id: n.id);
-                              ref.invalidate(notificationsListProvider(const NotificationsListKey()));
+                              ref.invalidate(
+                                notificationsListProvider(
+                                  const NotificationsListKey(),
+                                ),
+                              );
                             },
                           );
                         },
@@ -233,7 +278,9 @@ class _NotificationsTabContent extends ConsumerWidget {
         title: '加载失败',
         description: err.toString(),
         action: TextButton(
-          onPressed: () => ref.invalidate(notificationsListProvider(const NotificationsListKey())),
+          onPressed: () => ref.invalidate(
+            notificationsListProvider(const NotificationsListKey()),
+          ),
           child: const Text('重试'),
         ),
       ),
@@ -242,7 +289,10 @@ class _NotificationsTabContent extends ConsumerWidget {
 }
 
 class _HomeNotificationTile extends StatelessWidget {
-  const _HomeNotificationTile({required this.notification, required this.onMarkRead});
+  const _HomeNotificationTile({
+    required this.notification,
+    required this.onMarkRead,
+  });
 
   final NotificationModel notification;
   final VoidCallback onMarkRead;
@@ -258,17 +308,27 @@ class _HomeNotificationTile extends StatelessWidget {
         backgroundColor: isUnread ? theme.colorScheme.primaryContainer : null,
         child: Icon(
           _iconForType(notification.type),
-          color: isUnread ? theme.colorScheme.onPrimaryContainer : theme.colorScheme.outline,
+          color: isUnread
+              ? theme.colorScheme.onPrimaryContainer
+              : theme.colorScheme.outline,
         ),
       ),
       title: Text(
         notification.title ?? notification.type,
-        style: TextStyle(fontWeight: isUnread ? FontWeight.w600 : FontWeight.normal),
+        style: TextStyle(
+          fontWeight: isUnread ? FontWeight.w600 : FontWeight.normal,
+        ),
       ),
       subtitle: notification.body != null && notification.body!.isNotEmpty
-          ? Text(notification.body!, maxLines: 2, overflow: TextOverflow.ellipsis)
+          ? Text(
+              notification.body!,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            )
           : null,
-      trailing: isUnread ? TextButton(onPressed: onMarkRead, child: const Text('标为已读')) : null,
+      trailing: isUnread
+          ? TextButton(onPressed: onMarkRead, child: const Text('标为已读'))
+          : null,
     );
   }
 

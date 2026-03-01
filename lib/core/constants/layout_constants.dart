@@ -33,12 +33,16 @@ class LayoutConstants {
   /// 底部导航栏高度。
   static const double kBottomNavHeight = 56;
 
+  /// 壳内首页 FAB 与底部导航栏顶边的间距（调小则更贴导航栏，调大则更高）。
+  static const double kFabMarginAboveBottomNav = 1.5;
+
   static const EdgeInsets kListTileContentPadding = EdgeInsets.only(
     left: kListTileContentPaddingLeft,
     right: kListTileContentPaddingRight,
   );
 
   static BorderRadius get kRadiusSmallBR => BorderRadius.circular(kRadiusSmall);
-  static BorderRadius get kRadiusMediumBR => BorderRadius.circular(kRadiusMedium);
+  static BorderRadius get kRadiusMediumBR =>
+      BorderRadius.circular(kRadiusMedium);
   static BorderRadius get kRadiusLargeBR => BorderRadius.circular(kRadiusLarge);
 }

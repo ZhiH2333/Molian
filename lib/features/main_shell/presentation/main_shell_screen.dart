@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/layout_constants.dart';
 import '../../../core/responsive.dart';
 import '../../../core/router/app_router.dart';
+import '../../../shared/widgets/login_prompt_view.dart';
 import '../../auth/data/models/user_model.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../chat/presentation/chat_rooms_list_screen.dart';
@@ -63,13 +64,15 @@ class _MainShellScreenState extends ConsumerState<MainShellScreen> {
     ),
   ];
 
+  /// 未登录时各 tab 的提示文案（与导航顺序一致：浏览、圈子、聊天、个人）。
+  static const List<String> _guestHints = <String>[
+    '登录后查看发现与通知',
+    '登录后查看与加入圈子',
+    '登录后查看会话与好友',
+    '登录后查看与编辑个人资料',
+  ];
+
   void _onDestinationSelected(int index, UserModel? user) {
-    if (index == 1 || index == 2 || index == 3) {
-      if (user == null) {
-        context.go(AppRoutes.login);
-        return;
-      }
-    }
     setState(() => _currentIndex = index);
   }
 
@@ -79,16 +82,18 @@ class _MainShellScreenState extends ConsumerState<MainShellScreen> {
     final width = screenWidth(context);
     final useRail = useNavigationRail(width);
     return authState.when(
-      data: (user) {
-        final body = IndexedStack(
-          index: _currentIndex,
-          children: const <Widget>[
-            HomeScreen(inShell: true),
-            RealmsScreen(inShell: true),
-            ChatRoomsListScreen(),
-            ProfileScreen(inShell: true),
-          ],
-        );
+      data: (UserModel? user) {
+        final Widget body = user == null
+            ? LoginPromptView(hint: _guestHints[_currentIndex])
+            : IndexedStack(
+                index: _currentIndex,
+                children: const <Widget>[
+                  HomeScreen(inShell: true),
+                  RealmsScreen(inShell: true),
+                  ChatRoomsListScreen(),
+                  ProfileScreen(inShell: true),
+                ],
+              );
         if (useRail) {
           final padding = MediaQuery.viewPaddingOf(context);
           final isDesktop =

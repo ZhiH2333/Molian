@@ -12,6 +12,7 @@ import '../../../core/router/app_router.dart';
 import '../../../shared/widgets/app_background.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/login_prompt_view.dart';
 import '../../auth/data/models/user_model.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../posts/providers/posts_providers.dart';
@@ -140,14 +141,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               isNoBackground: wide,
               isWideScreen: wide,
               appBar: AppBar(title: const Text('个人资料')),
-              body: EmptyState(
-                title: '请先登录',
-                description: '登录后查看与编辑个人资料',
-                action: FilledButton(
-                  onPressed: () => context.go(AppRoutes.login),
-                  child: const Text('去登录'),
-                ),
-              ),
+              body: const LoginPromptView(hint: '登录后查看与编辑个人资料'),
             );
           }
           _initFromUser(user);
