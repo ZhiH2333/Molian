@@ -60,9 +60,7 @@ class HomeScreen extends ConsumerWidget {
           if (inShell) {
             final bottomInset = MediaQuery.paddingOf(context).bottom;
             final fabBottom =
-                LayoutConstants.kBottomNavHeight +
-                bottomInset +
-                LayoutConstants.kFabMarginAboveBottomNav;
+                bottomInset + LayoutConstants.kFabMarginAboveBottomNav;
             return Stack(
               children: <Widget>[
                 DefaultTabController(
