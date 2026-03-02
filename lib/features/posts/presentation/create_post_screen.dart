@@ -13,6 +13,7 @@ import '../../../core/image/image_compression_service.dart';
 import '../../../core/router/app_router.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/auto_leading_button.dart';
+import '../../../shared/widgets/upload_confirm_sheet.dart';
 import '../../files/data/files_repository.dart';
 import '../../files/providers/files_providers.dart';
 import '../data/models/post_model.dart';
@@ -146,16 +147,25 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
     );
     if (xFile == null || !mounted) return;
     setState(() => _error = null);
+    Uint8List previewBytes;
+    try {
+      previewBytes = await xFile.readAsBytes();
+    } catch (e) {
+      if (mounted)
+        setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      return;
+    }
+    if (!mounted) return;
+    final fileName = xFile.name.isNotEmpty ? xFile.name : 'image.jpg';
+    final confirmed = await showUploadConfirmSheet(
+      context,
+      fileName: fileName,
+      imageBytes: previewBytes,
+    );
+    if (!confirmed || !mounted) return;
     final repo = ref.read(postsRepositoryProvider);
     if (kIsWeb) {
-      Uint8List rawBytes;
-      try {
-        rawBytes = await xFile.readAsBytes();
-      } catch (e) {
-        if (mounted)
-          setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
-        return;
-      }
+      Uint8List rawBytes = previewBytes;
       Uint8List compressedBytes;
       try {
         compressedBytes = await ImageCompressionService.compressToBytes(
@@ -170,7 +180,7 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
         return;
       }
       if (!mounted) return;
-      final name = xFile.name.isNotEmpty ? xFile.name : 'image.jpg';
+      final name = fileName;
       final entry = _UploadingEntry(
         id: _uuid.v4(),
         bytes: compressedBytes,

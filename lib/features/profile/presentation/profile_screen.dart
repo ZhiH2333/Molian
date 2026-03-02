@@ -14,6 +14,7 @@ import '../../../shared/widgets/app_background.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/login_prompt_view.dart';
+import '../../../shared/widgets/upload_confirm_sheet.dart';
 import '../../auth/data/models/user_model.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../posts/providers/posts_providers.dart';
@@ -60,6 +61,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       imageQuality: 85,
     );
     if (xFile == null || !mounted) return;
+    final previewBytes = await xFile.readAsBytes();
+    if (!mounted) return;
+    final fileName = xFile.name.isNotEmpty ? xFile.name : 'avatar.jpg';
+    final confirmed = await showUploadConfirmSheet(
+      context,
+      fileName: fileName,
+      imageBytes: previewBytes,
+    );
+    if (!confirmed || !mounted) return;
     setState(() {
       _error = null;
       _isLoading = true;
@@ -69,17 +79,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       final profileRepo = ref.read(profileRepositoryProvider);
       String url;
       if (kIsWeb) {
-        final rawBytes = await xFile.readAsBytes();
         final compressedBytes = await ImageCompressionService.compressToBytes(
-          rawBytes,
+          previewBytes,
           maxBytesKb: ImageUploadConstants.avatarMaxKb,
           maxWidth: ImageUploadConstants.avatarMaxDimension,
           maxHeight: ImageUploadConstants.avatarMaxDimension,
         );
-        final name = xFile.name.isNotEmpty ? xFile.name : 'avatar.jpg';
         url = await postsRepo.uploadImageFromBytes(
           compressedBytes,
-          filename: name,
+          filename: fileName,
           mimeType: 'image/jpeg',
         );
       } else {

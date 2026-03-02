@@ -8,6 +8,7 @@ import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/auto_leading_button.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/image_lightbox.dart';
+import '../../../shared/widgets/upload_confirm_sheet.dart';
 import '../data/files_repository.dart';
 import '../data/models/file_model.dart';
 import '../providers/files_providers.dart';
@@ -27,13 +28,21 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     final picker = ImagePicker();
     final xFile = await picker.pickImage(source: ImageSource.gallery);
     if (xFile == null || !mounted) return;
+    final bytes = await xFile.readAsBytes();
+    if (!mounted) return;
+    final fileName = xFile.name.isNotEmpty ? xFile.name : 'image.jpg';
+    final confirmed = await showUploadConfirmSheet(
+      context,
+      fileName: fileName,
+      imageBytes: bytes,
+    );
+    if (!confirmed || !mounted) return;
     setState(() => _isUploading = true);
     try {
-      final bytes = await xFile.readAsBytes();
       final repo = ref.read(filesRepositoryProvider);
       await repo.uploadAndConfirm(
         bytes,
-        filename: xFile.name.isNotEmpty ? xFile.name : 'image.jpg',
+        filename: fileName,
         mimeType: 'image/jpeg',
       );
       ref.invalidate(filesListProvider);

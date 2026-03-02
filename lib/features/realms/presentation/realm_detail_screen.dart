@@ -13,6 +13,7 @@ import '../../../core/responsive.dart';
 import '../../../core/utils/image_url_utils.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/auto_leading_button.dart';
+import '../../../shared/widgets/upload_confirm_sheet.dart';
 import '../../files/data/files_repository.dart';
 import '../../files/providers/files_providers.dart';
 import '../../posts/data/models/post_model.dart';
@@ -549,10 +550,18 @@ class _EditRealmSheetState extends ConsumerState<_EditRealmSheet> {
     );
     if (xFile == null || !mounted) return;
     final previewBytes = await xFile.readAsBytes();
-    setState(() => _uploadingAvatar = true);
-    if (mounted) {
-      setState(() => _avatarPreviewBytes = previewBytes);
-    }
+    if (!mounted) return;
+    final fileName = xFile.name.isNotEmpty ? xFile.name : 'avatar.jpg';
+    final confirmed = await showUploadConfirmSheet(
+      context,
+      fileName: fileName,
+      imageBytes: previewBytes,
+    );
+    if (!confirmed || !mounted) return;
+    setState(() {
+      _uploadingAvatar = true;
+      _avatarPreviewBytes = previewBytes;
+    });
     try {
       final postsRepo = ref.read(postsRepositoryProvider);
       String url;
@@ -620,10 +629,18 @@ class _EditRealmSheetState extends ConsumerState<_EditRealmSheet> {
     );
     if (xFile == null || !mounted) return;
     final previewBytes = await xFile.readAsBytes();
-    setState(() => _uploadingBanner = true);
-    if (mounted) {
-      setState(() => _bannerPreviewBytes = previewBytes);
-    }
+    if (!mounted) return;
+    final fileName = xFile.name.isNotEmpty ? xFile.name : 'banner.jpg';
+    final confirmed = await showUploadConfirmSheet(
+      context,
+      fileName: fileName,
+      imageBytes: previewBytes,
+    );
+    if (!confirmed || !mounted) return;
+    setState(() {
+      _uploadingBanner = true;
+      _bannerPreviewBytes = previewBytes;
+    });
     try {
       final postsRepo = ref.read(postsRepositoryProvider);
       String url;
