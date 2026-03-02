@@ -109,6 +109,7 @@ class _RealmDetailScreenState extends ConsumerState<RealmDetailScreen> {
     final wide = isWideScreen(context);
     final async = ref.watch(realmDetailProvider(widget.realmId));
     final realm = _optimisticRealm ?? async.valueOrNull ?? widget.initialRealm;
+    final canManageRealm = async.valueOrNull?.isCreator ?? false;
     if (realm != null) _syncJoinedFromRealm(realm);
     final bool displayJoined = async.hasValue && realm != null
         ? realm.joined
@@ -120,7 +121,7 @@ class _RealmDetailScreenState extends ConsumerState<RealmDetailScreen> {
         leading: const AutoLeadingButton(),
         title: Text(realm?.name ?? '圈子'),
         actions: <Widget>[
-          if (realm != null && realm.isCreator) ...[
+          if (realm != null && canManageRealm) ...[
             IconButton(
               icon: const Icon(Icons.edit_outlined),
               onPressed: _isLoading

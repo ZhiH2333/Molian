@@ -1451,16 +1451,6 @@ app.get("/api/realms", async (c) => {
           .bind(userId, ...ids)
           .all();
         creatorIds = new Set((creatorRows.results as { id: string }[]).map((x) => x.id));
-        try {
-          const legacyRows = await c.env.molian_db.prepare(
-            `SELECT id FROM realms WHERE creator_id IS NULL AND id IN (${placeholders})`
-          )
-            .bind(...ids)
-            .all();
-          for (const row of legacyRows.results as { id: string }[]) {
-            if (joinedIds.has(row.id)) creatorIds.add(row.id);
-          }
-        } catch (_) {}
       } catch (_) {}
       for (const r of results) {
         const id = (r as { id?: string }).id;
@@ -1541,9 +1531,9 @@ app.get("/api/realms/:id", async (c) => {
     try {
       const realmRow = await c.env.molian_db.prepare("SELECT creator_id FROM realms WHERE id = ?").bind(r.id).first();
       const creatorId = realmRow && typeof realmRow === "object" ? (realmRow as { creator_id?: string }).creator_id : undefined;
-      isCreator = creatorId === userId || (creatorId == null && !!member);
+      isCreator = creatorId === userId;
     } catch (_) {
-      isCreator = !!member;
+      isCreator = false;
     }
   }
   return c.json({ realm: { ...r, joined, is_creator: isCreator } }, 200, corsHeaders());
@@ -1557,11 +1547,7 @@ app.patch("/api/realms/:id", async (c) => {
   if (!realm || typeof realm !== "object") return c.json({ error: "圈子不存在" }, 404, corsHeaders());
   const rid = (realm as { id: string }).id;
   const creatorId = (realm as { creator_id?: string }).creator_id;
-  let canEdit = creatorId === userId;
-  if (!canEdit && creatorId == null) {
-    const member = await c.env.molian_db.prepare("SELECT 1 FROM realm_members WHERE realm_id = ? AND user_id = ?").bind(rid, userId).first();
-    canEdit = !!member;
-  }
+  const canEdit = creatorId === userId;
   if (!canEdit) return c.json({ error: "只有创建者可编辑" }, 403, corsHeaders());
   const body = (await c.req.json()) as { name?: string; slug?: string; description?: string; avatar_url?: string; banner_url?: string };
   const name = body?.name !== undefined ? String(body.name).trim() : null;
@@ -1618,11 +1604,7 @@ app.delete("/api/realms/:id", async (c) => {
   if (!realm || typeof realm !== "object") return c.json({ error: "圈子不存在" }, 404, corsHeaders());
   const rid = (realm as { id: string }).id;
   const creatorId = (realm as { creator_id?: string }).creator_id;
-  let canDelete = creatorId === userId;
-  if (!canDelete && creatorId == null) {
-    const member = await c.env.molian_db.prepare("SELECT 1 FROM realm_members WHERE realm_id = ? AND user_id = ?").bind(rid, userId).first();
-    canDelete = !!member;
-  }
+  const canDelete = creatorId === userId;
   if (!canDelete) return c.json({ error: "只有创建者可删除" }, 403, corsHeaders());
   try {
     await c.env.molian_db.prepare("DELETE FROM post_communities WHERE community_id = ?").bind(rid).run();
