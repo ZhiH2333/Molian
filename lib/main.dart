@@ -35,6 +35,11 @@ void main() {
           error.toString().contains('61199')) {
         return;
       }
+      final msg = error.toString();
+      if (msg.contains('connection errored') &&
+          msg.contains('XMLHttpRequest onError')) {
+        return;
+      }
       FlutterError.reportError(
         FlutterErrorDetails(
           exception: error,

@@ -275,14 +275,17 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
     final success = await notifier.submit();
     if (!mounted) return;
     if (success) {
-      context.go(AppRoutes.home);
+      final messenger = ScaffoldMessenger.of(context);
       final isEdit = ref.read(createPostControllerProvider).isEditMode;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(isEdit ? '已保存' : '发布成功'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      context.go(AppRoutes.home);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(isEdit ? '已保存' : '发布成功'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      });
     } else {
       final message = ref.read(createPostControllerProvider).errorMessage ?? '发布失败';
       ScaffoldMessenger.of(context).showSnackBar(
