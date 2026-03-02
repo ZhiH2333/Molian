@@ -162,69 +162,126 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 MediaQuery.of(ctx).viewInsets.bottom +
                 LayoutConstants.kSpacingXLarge,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              Text(
-                '编辑资料',
-                style: Theme.of(ctx).textTheme.titleLarge,
-              ),
-              const SizedBox(height: LayoutConstants.kSpacingLarge),
-              TextField(
-                controller: nameController,
-                decoration: InputDecoration(
-                  labelText: '显示名',
-                  hintText: '请输入显示名',
-                  filled: true,
-                  border: OutlineInputBorder(
-                    borderRadius: LayoutConstants.kRadiusMediumBR,
+          child: Consumer(
+            builder: (BuildContext ctx, WidgetRef ref, _) {
+              final user = ref.watch(authStateProvider).valueOrNull;
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  Text(
+                    '编辑资料',
+                    style: Theme.of(ctx).textTheme.titleLarge,
                   ),
-                ),
-                textCapitalization: TextCapitalization.none,
-              ),
-              const SizedBox(height: LayoutConstants.kSpacingMedium),
-              TextField(
-                controller: bioController,
-                decoration: InputDecoration(
-                  labelText: '个人简介',
-                  hintText: '选填',
-                  filled: true,
-                  border: OutlineInputBorder(
-                    borderRadius: LayoutConstants.kRadiusMediumBR,
-                  ),
-                ),
-                maxLines: 3,
-                textCapitalization: TextCapitalization.sentences,
-              ),
-              const SizedBox(height: LayoutConstants.kSpacingXLarge),
-              FilledButton(
-                onPressed: _isLoading
-                    ? null
-                    : () async {
-                        await _save(
-                          displayName: nameController.text,
-                          bio: bioController.text,
-                        );
-                        if (ctx.mounted && _error == null) Navigator.pop(ctx);
-                      },
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: LayoutConstants.kSpacingMedium,
-                  ),
-                ),
-                child: _isLoading
-                    ? SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Theme.of(ctx).colorScheme.onPrimary,
+                  const SizedBox(height: LayoutConstants.kSpacingLarge),
+                  Center(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        CircleAvatar(
+                          radius: 40,
+                          backgroundImage:
+                              user != null &&
+                                  user.avatarUrl != null &&
+                                  user.avatarUrl!.isNotEmpty
+                              ? NetworkImage(
+                                  fullImageUrl(user.avatarUrl),
+                                )
+                              : null,
+                          child:
+                              user == null ||
+                                  user.avatarUrl == null ||
+                                  user.avatarUrl!.isEmpty
+                              ? Text(
+                                  user != null
+                                      ? ((_displayNameController.text.isNotEmpty
+                                              ? _displayNameController.text
+                                              : user.username)[0])
+                                      : '?',
+                                  style: Theme.of(ctx)
+                                      .textTheme
+                                      .headlineMedium
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                )
+                              : null,
                         ),
-                      )
-                    : const Text('保存'),
-              ),
+                        const SizedBox(width: LayoutConstants.kSpacingLarge),
+                        FilledButton.tonalIcon(
+                          onPressed: _isLoading ? null : _pickAvatar,
+                          icon: const Icon(
+                            Icons.camera_alt_outlined,
+                            size: LayoutConstants.kIconSizeSmall,
+                          ),
+                          label: const Text('更换头像'),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: LayoutConstants.kSpacingMedium,
+                              vertical: LayoutConstants.kSpacingSmall,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: LayoutConstants.kSpacingLarge),
+                  TextField(
+                    controller: nameController,
+                    decoration: InputDecoration(
+                      labelText: '显示名',
+                      hintText: '请输入显示名',
+                      filled: true,
+                      border: OutlineInputBorder(
+                        borderRadius: LayoutConstants.kRadiusMediumBR,
+                      ),
+                    ),
+                    textCapitalization: TextCapitalization.none,
+                  ),
+                  const SizedBox(height: LayoutConstants.kSpacingMedium),
+                  TextField(
+                    controller: bioController,
+                    decoration: InputDecoration(
+                      labelText: '个人简介',
+                      hintText: '选填',
+                      filled: true,
+                      border: OutlineInputBorder(
+                        borderRadius: LayoutConstants.kRadiusMediumBR,
+                      ),
+                    ),
+                    maxLines: 3,
+                    textCapitalization: TextCapitalization.sentences,
+                  ),
+                  const SizedBox(height: LayoutConstants.kSpacingXLarge),
+                  FilledButton(
+                    onPressed: _isLoading
+                        ? null
+                        : () async {
+                            await _save(
+                              displayName: nameController.text,
+                              bio: bioController.text,
+                            );
+                            if (ctx.mounted && _error == null) Navigator.pop(ctx);
+                          },
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: LayoutConstants.kSpacingMedium,
+                      ),
+                    ),
+                    child: _isLoading
+                        ? SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Theme.of(ctx).colorScheme.onPrimary,
+                            ),
+                          )
+                        : const Text('保存'),
+                  ),
             ],
+          );
+            },
           ),
         );
       },
@@ -283,62 +340,30 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        GestureDetector(
-                          onTap: _isLoading ? null : _pickAvatar,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: <Widget>[
-                              CircleAvatar(
-                                radius: 40,
-                                backgroundImage:
-                                    user.avatarUrl != null &&
-                                        user.avatarUrl!.isNotEmpty
-                                    ? NetworkImage(
-                                        fullImageUrl(user.avatarUrl),
-                                      )
-                                    : null,
-                                child:
-                                    user.avatarUrl == null ||
-                                        user.avatarUrl!.isEmpty
-                                    ? Text(
-                                        (_displayNameController.text.isNotEmpty
-                                            ? _displayNameController.text
-                                            : user.username)[0],
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .headlineMedium
-                                            ?.copyWith(
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                      )
-                                    : null,
-                              ),
-                              if (_isLoading)
-                                Positioned.fill(
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .scrim
-                                          .withValues(alpha: 0.4),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Center(
-                                      child: SizedBox(
-                                        width: LayoutConstants.kIconSizeMedium,
-                                        height: LayoutConstants.kIconSizeMedium,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurface,
-                                        ),
+                        CircleAvatar(
+                          radius: 40,
+                          backgroundImage:
+                              user.avatarUrl != null &&
+                                  user.avatarUrl!.isNotEmpty
+                              ? NetworkImage(
+                                  fullImageUrl(user.avatarUrl),
+                                )
+                              : null,
+                          child:
+                              user.avatarUrl == null ||
+                                  user.avatarUrl!.isEmpty
+                              ? Text(
+                                  (_displayNameController.text.isNotEmpty
+                                      ? _displayNameController.text
+                                      : user.username)[0],
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineMedium
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w600,
                                       ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
+                                )
+                              : null,
                         ),
                         const SizedBox(width: LayoutConstants.kSpacingXLarge),
                         Expanded(
