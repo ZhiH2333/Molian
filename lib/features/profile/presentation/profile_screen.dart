@@ -9,6 +9,7 @@ import '../../../core/constants/layout_constants.dart';
 import '../../../core/image/image_compression_service.dart';
 import '../../../core/responsive.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/utils/image_url_utils.dart';
 import '../../../shared/widgets/app_background.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/empty_state.dart';
@@ -30,7 +31,6 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
-  final _formKey = GlobalKey<FormState>();
   final TextEditingController _displayNameController = TextEditingController();
   final TextEditingController _bioController = TextEditingController();
   bool _isLoading = false;
@@ -55,7 +55,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final user = ref.read(authStateProvider).valueOrNull;
     if (user == null) return;
     final picker = ImagePicker();
-    final xFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    final xFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
     if (xFile == null || !mounted) return;
     setState(() {
       _error = null;
@@ -86,7 +89,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           maxWidth: ImageUploadConstants.avatarMaxDimension,
           maxHeight: ImageUploadConstants.avatarMaxDimension,
         );
-        url = await postsRepo.uploadImage(compressedPath, mimeType: 'image/jpeg');
+        url = await postsRepo.uploadImage(
+          compressedPath,
+          mimeType: 'image/jpeg',
+        );
       }
       await profileRepo.updateMe(avatarUrl: url);
       ref.invalidate(authStateProvider);
@@ -103,8 +109,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
-  Future<void> _save() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+  Future<void> _save({required String displayName, required String bio}) async {
+    if (displayName.trim().isEmpty) {
+      if (mounted) {
+        setState(() => _error = '请输入显示名');
+      }
+      return;
+    }
     setState(() {
       _isLoading = true;
       _error = null;
@@ -112,9 +123,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     try {
       final profileRepo = ref.read(profileRepositoryProvider);
       await profileRepo.updateMe(
-        displayName: _displayNameController.text.trim(),
-        bio: _bioController.text.trim(),
+        displayName: displayName.trim(),
+        bio: bio.trim(),
       );
+      _displayNameController.text = displayName.trim();
+      _bioController.text = bio.trim();
       ref.invalidate(authStateProvider);
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -126,6 +139,104 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         });
       }
     }
+  }
+
+  void _openEditSheet(BuildContext context) {
+    final TextEditingController nameController = TextEditingController(
+      text: _displayNameController.text,
+    );
+    final TextEditingController bioController = TextEditingController(
+      text: _bioController.text,
+    );
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (BuildContext ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: LayoutConstants.kSpacingXLarge,
+            right: LayoutConstants.kSpacingXLarge,
+            top: LayoutConstants.kSpacingXLarge,
+            bottom:
+                MediaQuery.of(ctx).viewInsets.bottom +
+                LayoutConstants.kSpacingXLarge,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Text(
+                '编辑资料',
+                style: Theme.of(ctx).textTheme.titleLarge,
+              ),
+              const SizedBox(height: LayoutConstants.kSpacingLarge),
+              TextField(
+                controller: nameController,
+                decoration: InputDecoration(
+                  labelText: '显示名',
+                  hintText: '请输入显示名',
+                  filled: true,
+                  border: OutlineInputBorder(
+                    borderRadius: LayoutConstants.kRadiusMediumBR,
+                  ),
+                ),
+                textCapitalization: TextCapitalization.none,
+              ),
+              const SizedBox(height: LayoutConstants.kSpacingMedium),
+              TextField(
+                controller: bioController,
+                decoration: InputDecoration(
+                  labelText: '个人简介',
+                  hintText: '选填',
+                  filled: true,
+                  border: OutlineInputBorder(
+                    borderRadius: LayoutConstants.kRadiusMediumBR,
+                  ),
+                ),
+                maxLines: 3,
+                textCapitalization: TextCapitalization.sentences,
+              ),
+              const SizedBox(height: LayoutConstants.kSpacingXLarge),
+              FilledButton(
+                onPressed: _isLoading
+                    ? null
+                    : () async {
+                        await _save(
+                          displayName: nameController.text,
+                          bio: bioController.text,
+                        );
+                        if (ctx.mounted && _error == null) Navigator.pop(ctx);
+                      },
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: LayoutConstants.kSpacingMedium,
+                  ),
+                ),
+                child: _isLoading
+                    ? SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Theme.of(ctx).colorScheme.onPrimary,
+                        ),
+                      )
+                    : const Text('保存'),
+              ),
+            ],
+          ),
+        );
+      },
+    ).whenComplete(() {
+      nameController.dispose();
+      bioController.dispose();
+    });
+  }
+
+  Future<void> _logout(BuildContext context) async {
+    await ref.read(authStateProvider.notifier).logout();
+    if (context.mounted) context.go(AppRoutes.home);
   }
 
   @override
@@ -149,124 +260,190 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             isNoBackground: wide,
             isWideScreen: wide,
             appBar: AppBar(
+              automaticallyImplyLeading: !widget.inShell,
               title: const Text('个人资料'),
+              centerTitle: true,
               actions: <Widget>[
                 IconButton(
-                  icon: const Icon(Icons.settings),
-                  onPressed: () => context.push(AppRoutes.settings),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.logout),
-                  onPressed: () async {
-                    await ref.read(authStateProvider.notifier).logout();
-                    if (context.mounted) context.go(AppRoutes.home);
-                  },
+                  icon: const Icon(Icons.logout_outlined),
+                  onPressed: () => _logout(context),
                 ),
               ],
             ),
-            body: Form(
-              key: _formKey,
-              child: ListView(
-                padding: const EdgeInsets.all(LayoutConstants.kSpacingXLarge),
-                children: <Widget>[
-                  Center(
-                    child: GestureDetector(
-                      onTap: _isLoading ? null : _pickAvatar,
-                      child: Stack(
-                        children: <Widget>[
-                          CircleAvatar(
-                            radius: 48,
-                            backgroundImage: user.avatarUrl != null && user.avatarUrl!.isNotEmpty
-                                ? NetworkImage(user.avatarUrl!)
-                                : null,
-                            child: user.avatarUrl == null || user.avatarUrl!.isEmpty
-                                ? Text((user.displayName ?? user.username).isNotEmpty ? (user.displayName ?? user.username)[0] : '?')
-                                : null,
-                          ),
-                          if (_isLoading)
-                            const Positioned.fill(
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(color: Colors.black26),
-                                child: Center(child: CircularProgressIndicator()),
+            body: ListView(
+              padding: const EdgeInsets.symmetric(
+                horizontal: LayoutConstants.kSpacingXLarge,
+                vertical: LayoutConstants.kSpacingLarge,
+              ),
+              children: <Widget>[
+                Card(
+                  margin: EdgeInsets.zero,
+                  child: Padding(
+                    padding: const EdgeInsets.all(LayoutConstants.kSpacingXLarge),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        GestureDetector(
+                          onTap: _isLoading ? null : _pickAvatar,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: <Widget>[
+                              CircleAvatar(
+                                radius: 40,
+                                backgroundImage:
+                                    user.avatarUrl != null &&
+                                        user.avatarUrl!.isNotEmpty
+                                    ? NetworkImage(
+                                        fullImageUrl(user.avatarUrl),
+                                      )
+                                    : null,
+                                child:
+                                    user.avatarUrl == null ||
+                                        user.avatarUrl!.isEmpty
+                                    ? Text(
+                                        (_displayNameController.text.isNotEmpty
+                                            ? _displayNameController.text
+                                            : user.username)[0],
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .headlineMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      )
+                                    : null,
                               ),
-                            ),
-                        ],
-                      ),
+                              if (_isLoading)
+                                Positioned.fill(
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .scrim
+                                          .withValues(alpha: 0.4),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Center(
+                                      child: SizedBox(
+                                        width: LayoutConstants.kIconSizeMedium,
+                                        height: LayoutConstants.kIconSizeMedium,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurface,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: LayoutConstants.kSpacingXLarge),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                _displayNameController.text,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleLarge
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                              ),
+                              const SizedBox(height: LayoutConstants.kSpacingSmall),
+                              Text(
+                                _bioController.text.isNotEmpty
+                                    ? _bioController.text
+                                    : '添加个人简介',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
+                              ),
+                              const SizedBox(height: LayoutConstants.kSpacingLarge),
+                              FilledButton.tonalIcon(
+                                onPressed: _isLoading
+                                    ? null
+                                    : () => _openEditSheet(context),
+                                icon: const Icon(
+                                  Icons.edit_outlined,
+                                  size: LayoutConstants.kIconSizeSmall,
+                                ),
+                                label: const Text('编辑资料'),
+                                style: FilledButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: LayoutConstants.kSpacingLarge,
+                                    vertical: LayoutConstants.kSpacingSmall,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: LayoutConstants.kSpacingSmall),
-                  Center(child: Text(_isLoading ? '上传中...' : '点击头像更换')),
-                  const SizedBox(height: LayoutConstants.kSpacingXLarge),
-                  TextFormField(
-                    controller: _displayNameController,
-                    decoration: const InputDecoration(labelText: '显示名', border: OutlineInputBorder()),
-                    enabled: !_isLoading,
-                    validator: (String? v) => (v?.trim() ?? '').isEmpty ? '请输入显示名' : null,
-                  ),
+                ),
+                if (_error != null) ...[
                   const SizedBox(height: LayoutConstants.kSpacingLarge),
-                  TextFormField(
-                    controller: _bioController,
-                    decoration: const InputDecoration(labelText: '简介', border: OutlineInputBorder(), alignLabelWithHint: true),
-                    maxLines: 3,
-                    enabled: !_isLoading,
-                  ),
-                  if (_error != null) ...[
-                    const SizedBox(height: LayoutConstants.kSpacingMedium),
-                    Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-                  ],
-                  const SizedBox(height: LayoutConstants.kSpacingLarge),
-                  ListTile(
-                    contentPadding: LayoutConstants.kListTileContentPadding,
-                    minLeadingWidth: LayoutConstants.kListTileMinLeadingWidth,
-                    leading: const Icon(Icons.mail_outline),
-                    title: const Text('好友申请'),
-                    subtitle: const Text('查看、接受或拒绝好友申请'),
-                    onTap: () => context.push(AppRoutes.friendRequests),
-                    shape: RoundedRectangleBorder(borderRadius: LayoutConstants.kRadiusSmallBR),
-                  ),
-                  ListTile(
-                    contentPadding: LayoutConstants.kListTileContentPadding,
-                    minLeadingWidth: LayoutConstants.kListTileMinLeadingWidth,
-                    leading: const Icon(Icons.people_outline),
-                    title: const Text('关注与粉丝'),
-                    subtitle: const Text('查看我关注的人与粉丝列表'),
-                    onTap: () => context.push(AppRoutes.social),
-                    shape: RoundedRectangleBorder(borderRadius: LayoutConstants.kRadiusSmallBR),
-                  ),
-                  ListTile(
-                    contentPadding: LayoutConstants.kListTileContentPadding,
-                    minLeadingWidth: LayoutConstants.kListTileMinLeadingWidth,
-                    leading: const Icon(Icons.notifications_outlined),
-                    title: const Text('通知中心'),
-                    subtitle: const Text('点赞、评论、关注等通知'),
-                    onTap: () => context.push(AppRoutes.notifications),
-                    shape: RoundedRectangleBorder(borderRadius: LayoutConstants.kRadiusSmallBR),
-                  ),
-                  ListTile(
-                    contentPadding: LayoutConstants.kListTileContentPadding,
-                    minLeadingWidth: LayoutConstants.kListTileMinLeadingWidth,
-                    leading: const Icon(Icons.people_outline),
-                    title: const Text('圈子'),
-                    subtitle: const Text('加入或浏览圈子'),
-                    onTap: () => context.push(AppRoutes.realms),
-                    shape: RoundedRectangleBorder(borderRadius: LayoutConstants.kRadiusSmallBR),
-                  ),
-                  ListTile(
-                    contentPadding: LayoutConstants.kListTileContentPadding,
-                    minLeadingWidth: LayoutConstants.kListTileMinLeadingWidth,
-                    leading: const Icon(Icons.folder_outlined),
-                    title: const Text('我的文件'),
-                    subtitle: const Text('上传与查看文件'),
-                    onTap: () => context.push(AppRoutes.files),
-                    shape: RoundedRectangleBorder(borderRadius: LayoutConstants.kRadiusSmallBR),
-                  ),
-                  const SizedBox(height: LayoutConstants.kSpacingXLarge),
-                  FilledButton(
-                    onPressed: _isLoading ? null : _save,
-                    child: _isLoading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('保存'),
+                  Text(
+                    _error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                      fontSize: Theme.of(context).textTheme.bodyMedium?.fontSize,
+                    ),
                   ),
                 ],
-              ),
+                const SizedBox(height: LayoutConstants.kSpacingLarge),
+                Card(
+                  margin: EdgeInsets.zero,
+                  child: Column(
+                    children: <Widget>[
+                      _ProfileEntry(
+                        icon: Icons.notifications_outlined,
+                        title: '消息',
+                        onTap: () => context.push(AppRoutes.notifications),
+                      ),
+                      const Divider(height: 1),
+                      _ProfileEntry(
+                        icon: Icons.people_outline,
+                        title: '关注和粉丝',
+                        onTap: () => context.push(AppRoutes.social),
+                      ),
+                      const Divider(height: 1),
+                      _ProfileEntry(
+                        icon: Icons.folder_outlined,
+                        title: '文件',
+                        onTap: () => context.push(AppRoutes.files),
+                      ),
+                      const Divider(height: 1),
+                      _ProfileEntry(
+                        icon: Icons.article_outlined,
+                        title: '帖子',
+                        onTap: () => context.go(AppRoutes.home),
+                      ),
+                      const Divider(height: 1),
+                      _ProfileEntry(
+                        icon: Icons.settings_outlined,
+                        title: '设置',
+                        onTap: () => context.push(AppRoutes.settings),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           );
         },
@@ -290,6 +467,36 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ProfileEntry extends StatelessWidget {
+  const _ProfileEntry({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      minLeadingWidth: LayoutConstants.kListTileMinLeadingWidth,
+      contentPadding: LayoutConstants.kListTileContentPadding,
+      leading: Icon(icon, size: LayoutConstants.kIconSizeMedium),
+      title: Text(
+        title,
+        style: Theme.of(context).textTheme.titleMedium,
+      ),
+      trailing: Icon(
+        Icons.chevron_right,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+      onTap: onTap,
     );
   }
 }
