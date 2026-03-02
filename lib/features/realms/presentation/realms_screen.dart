@@ -116,36 +116,21 @@ class _RealmsListTab extends ConsumerWidget {
           },
           child: ListView.builder(
             padding: const EdgeInsets.only(
+              left: LayoutConstants.kSpacingXLarge,
+              right: LayoutConstants.kSpacingXLarge,
+              top: LayoutConstants.kSpacingMedium,
               bottom: LayoutConstants.kSpacingXLarge,
             ),
             itemCount: realms.length,
             itemBuilder: (BuildContext context, int index) {
               final realm = realms[index];
-              return ListTile(
-                minLeadingWidth: LayoutConstants.kListTileMinLeadingWidth,
-                contentPadding: LayoutConstants.kListTileContentPadding,
-                leading: CircleAvatar(
-                  backgroundImage:
-                      realm.avatarUrl != null && realm.avatarUrl!.isNotEmpty
-                      ? CachedNetworkImageProvider(
-                          fullImageUrl(realm.avatarUrl),
-                        )
-                      : null,
-                  child: realm.avatarUrl == null || realm.avatarUrl!.isEmpty
-                      ? Text(realm.name.isNotEmpty ? realm.name[0] : '?')
-                      : null,
+              return Padding(
+                padding: const EdgeInsets.only(bottom: LayoutConstants.kSpacingLarge),
+                child: _RealmCard(
+                  realm: realm,
+                  onTap: () =>
+                      context.push(AppRoutes.realmDetail(realm.id), extra: realm),
                 ),
-                title: Text(realm.name),
-                subtitle:
-                    realm.description != null && realm.description!.isNotEmpty
-                    ? Text(
-                        realm.description!,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      )
-                    : null,
-                onTap: () =>
-                    context.push(AppRoutes.realmDetail(realm.id), extra: realm),
               );
             },
           ),
@@ -183,5 +168,103 @@ class _RealmsListTab extends ConsumerWidget {
       case RealmsScope.all:
         return '点击右上角 + 创建圈子';
     }
+  }
+}
+
+/// 圈子预览卡片：白底圆角、左侧头像、右侧标题/副标题/描述，统一卡片样式。
+class _RealmCard extends StatelessWidget {
+  const _RealmCard({required this.realm, required this.onTap});
+
+  final RealmModel realm;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: LayoutConstants.kRadiusMediumBR,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(LayoutConstants.kSpacingLarge),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: LayoutConstants.kRadiusMediumBR,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: colorScheme.surfaceContainerHighest,
+                backgroundImage:
+                    realm.avatarUrl != null && realm.avatarUrl!.isNotEmpty
+                    ? CachedNetworkImageProvider(
+                        fullImageUrl(realm.avatarUrl),
+                      )
+                    : null,
+                child: realm.avatarUrl == null || realm.avatarUrl!.isEmpty
+                    ? Text(
+                        realm.name.isNotEmpty ? realm.name[0] : '?',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: LayoutConstants.kSpacingLarge),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      realm.name,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (realm.slug.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        realm.slug,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    if (realm.description != null &&
+                        realm.description!.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        realm.description!,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: Colors.black87,
+                        ),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
