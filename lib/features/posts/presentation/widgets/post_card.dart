@@ -57,6 +57,13 @@ class PostCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final recordedIds = ref.read(recordedViewPostIdsProvider);
+    if (!recordedIds.contains(post.id)) {
+      ref.read(recordedViewPostIdsProvider.notifier).update((s) => s..add(post.id));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(postsRepositoryProvider).recordPostView(post.id);
+      });
+    }
     final UserModel? authUser = ref.watch(authStateProvider).valueOrNull;
     final bool isOwnPost = authUser != null && authUser.id == post.userId;
     final PostUser? user = post.user;
@@ -721,7 +728,10 @@ class _PostActionBarState extends ConsumerState<_PostActionBar> {
         const SizedBox(width: 4),
         _ActionButton(
           icon: Icons.bar_chart,
-          count: widget.post.viewCount,
+          count: widget.post.viewCount +
+              (widget.ref.watch(recordedViewPostIdsProvider).contains(widget.post.id)
+                  ? 1
+                  : 0),
           color: defaultColor,
           activeColor: const Color(0xFF1D9BF0),
           onTap: null,

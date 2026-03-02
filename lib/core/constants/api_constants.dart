@@ -23,6 +23,7 @@ class ApiConstants {
   static const String authRefresh = '/api/auth/refresh';
   static const String usersMe = '/api/users/me';
   static const String posts = '/api/posts';
+  static String postView(String postId) => '$posts/$postId/view';
   static const String users = '/api/users';
   static const String follows = '/api/follows';
   static const String messages = '/api/messages';

@@ -27,6 +27,10 @@ final postDetailProvider = FutureProvider.family<PostModel?, String>((ref, id) a
   return repo.getPost(id);
 });
 
+/// 本会话内已上报过浏览的帖子 id 集合，用于避免重复上报并用于本地展示 +1。
+final recordedViewPostIdsProvider =
+    StateProvider<Set<String>>((ref) => <String>{});
+
 class PostsListKey {
   const PostsListKey({this.limit = 20, this.cursor});
   final int limit;

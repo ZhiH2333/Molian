@@ -91,6 +91,15 @@ class PostsRepository {
     }
   }
 
+  /// 记录帖子被浏览一次（用户刷到即上报，后端需实现 POST /api/posts/:id/view）。
+  Future<void> recordPostView(String postId) async {
+    try {
+      await _dio.post<dynamic>(ApiConstants.postView(postId));
+    } on DioException catch (_) {
+      // 后端未实现或网络失败时静默忽略，不影响列表展示。
+    }
+  }
+
   /// 更新帖子，仅发布者有权编辑。支持 title、content、is_public、community_ids、image_urls。
   Future<PostModel> updatePost(
     String id, {

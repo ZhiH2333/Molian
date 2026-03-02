@@ -336,7 +336,7 @@ app.delete("/api/users/me/friends/:id", async (c) => {
 
 // ----- Posts -----
 const postsSelectColumns =
-  "p.id, p.user_id, p.title, p.content, p.image_urls, p.is_public, p.created_at, p.updated_at, u.username, u.display_name, u.avatar_url";
+  "p.id, p.user_id, p.title, p.content, p.image_urls, p.is_public, p.created_at, p.updated_at, p.view_count, u.username, u.display_name, u.avatar_url";
 const postsSelectColumnsLegacy =
   "p.id, p.user_id, p.content, p.image_urls, p.created_at, p.updated_at, u.username, u.display_name, u.avatar_url";
 const postsPublicWhere = "p.is_public = 1";
@@ -418,6 +418,7 @@ app.get("/api/posts", async (c) => {
         liked = !!l;
       }
       const commentCount = (await env.molian_db.prepare("SELECT COUNT(*) as c FROM comments WHERE post_id = ?").bind(postId).first()) as { c: number };
+      const viewCount = typeof (r as { view_count?: number }).view_count === "number" ? (r as { view_count: number }).view_count : 0;
       return {
         id: r.id,
         user_id: r.user_id,
@@ -430,6 +431,7 @@ app.get("/api/posts", async (c) => {
         like_count: likeCount?.c ?? 0,
         liked,
         comment_count: commentCount?.c ?? 0,
+        view_count: viewCount,
         user: { username: r.username, display_name: r.display_name, avatar_url: r.avatar_url },
       };
     })
@@ -557,6 +559,7 @@ app.get("/api/posts/:id", async (c) => {
     const pc = await c.env.molian_db.prepare("SELECT community_id FROM post_communities WHERE post_id = ?").bind(r.id).all();
     communityIds = (pc.results as { community_id: string }[]).map((x) => x.community_id);
   } catch (_) {}
+  const viewCount = typeof (r as { view_count?: number }).view_count === "number" ? (r as { view_count: number }).view_count : 0;
   return c.json(
     {
       post: {
@@ -569,12 +572,27 @@ app.get("/api/posts/:id", async (c) => {
         community_ids: communityIds,
         created_at: r.created_at,
         updated_at: r.updated_at,
+        view_count: viewCount,
         user: { username: r.username, display_name: r.display_name, avatar_url: r.avatar_url },
       },
     },
     200,
     corsHeaders()
   );
+});
+
+// 记录帖子被浏览一次（用户刷到即调用，无需登录）
+app.post("/api/posts/:id/view", async (c) => {
+  const id = c.req.param("id");
+  const exists = await c.env.molian_db.prepare("SELECT id FROM posts WHERE id = ?").bind(id).first();
+  if (!exists) return c.json({ error: "帖子不存在" }, 404, corsHeaders());
+  try {
+    await c.env.molian_db.prepare("UPDATE posts SET view_count = COALESCE(view_count, 0) + 1 WHERE id = ?").bind(id).run();
+  } catch (e) {
+    if (isSchemaError(e)) return c.json({ ok: true }, 200, corsHeaders());
+    throw e;
+  }
+  return c.json({ ok: true }, 200, corsHeaders());
 });
 
 app.patch("/api/posts/:id", async (c) => {
@@ -1354,6 +1372,7 @@ app.get("/api/feeds", async (c) => {
         liked = !!l;
       }
       const commentCount = (await env.molian_db.prepare("SELECT COUNT(*) as c FROM comments WHERE post_id = ?").bind(postId).first()) as { c: number };
+      const viewCount = typeof (r as { view_count?: number }).view_count === "number" ? (r as { view_count: number }).view_count : 0;
       return {
         id: r.id,
         user_id: r.user_id,
@@ -1366,6 +1385,7 @@ app.get("/api/feeds", async (c) => {
         like_count: likeCount?.c ?? 0,
         liked,
         comment_count: commentCount?.c ?? 0,
+        view_count: viewCount,
         user: { username: r.username, display_name: r.display_name, avatar_url: r.avatar_url },
       };
     })
@@ -1671,6 +1691,7 @@ app.get("/api/realms/:id/posts", async (c) => {
         liked = !!l;
       }
       const commentCount = (await c.env.molian_db.prepare("SELECT COUNT(*) as c FROM comments WHERE post_id = ?").bind(postId).first()) as { c: number };
+      const viewCount = typeof (r as { view_count?: number }).view_count === "number" ? (r as { view_count: number }).view_count : 0;
       return {
         id: r.id,
         user_id: r.user_id,
@@ -1683,6 +1704,7 @@ app.get("/api/realms/:id/posts", async (c) => {
         like_count: likeCount?.c ?? 0,
         liked,
         comment_count: commentCount?.c ?? 0,
+        view_count: viewCount,
         user: { username: r.username, display_name: r.display_name, avatar_url: r.avatar_url },
       };
     })
