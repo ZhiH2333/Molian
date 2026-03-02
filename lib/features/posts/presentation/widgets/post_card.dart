@@ -5,10 +5,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/app_router.dart';
 import '../../../../shared/widgets/image_lightbox.dart';
 import '../../../../shared/widgets/post_image_gallery.dart';
 import '../../../auth/data/models/user_model.dart';
 import '../../../auth/providers/auth_providers.dart';
+import '../../../realms/data/models/realm_model.dart';
+import '../../../realms/providers/realms_providers.dart';
 import '../../../social/providers/social_providers.dart';
 import '../../data/models/post_model.dart';
 import '../../providers/posts_providers.dart';
@@ -65,11 +68,7 @@ class PostCard extends ConsumerWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          _PostAvatar(
-            user: user,
-            name: name,
-            onTap: () {},
-          ),
+          _PostAvatar(user: user, name: name, onTap: () {}),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -97,15 +96,18 @@ class PostCard extends ConsumerWidget {
                 ],
                 const SizedBox(height: 4),
                 _PostContent(content: post.content),
-                if (post.imageUrls != null && post.imageUrls!.isNotEmpty) ...<Widget>[
+                if (post.imageUrls != null &&
+                    post.imageUrls!.isNotEmpty) ...<Widget>[
                   const SizedBox(height: 12),
-                  _PostImages(
-                    imageUrls: post.imageUrls!,
-                    postId: post.id,
-                  ),
+                  _PostImages(imageUrls: post.imageUrls!, postId: post.id),
                 ],
                 const SizedBox(height: 12),
                 _PostActionBar(post: post, authUser: authUser, ref: ref),
+                if (post.communityIds != null &&
+                    post.communityIds!.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  _PostRealmLink(realmId: post.communityIds!.first),
+                ],
                 const SizedBox(height: 8),
               ],
             ),
@@ -121,11 +123,66 @@ class PostCard extends ConsumerWidget {
         else
           InkWell(
             onTap: () => context.push('/posts/${post.id}', extra: post),
-            onLongPress: () => _showPostActionsSheet(context, ref, post, isOwnPost, onPostDeleted: onPostDeleted),
+            onLongPress: () => _showPostActionsSheet(
+              context,
+              ref,
+              post,
+              isOwnPost,
+              onPostDeleted: onPostDeleted,
+            ),
             child: cardContent,
           ),
         const Divider(height: 1, thickness: 0.5),
       ],
+    );
+  }
+}
+
+/// 帖子下方展示「该帖子已链接到圈子名」，右侧小箭头点击跳转圈子详情。
+class _PostRealmLink extends ConsumerWidget {
+  const _PostRealmLink({required this.realmId});
+
+  final String realmId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(realmDetailProvider(realmId));
+    final RealmModel? realm = async.valueOrNull;
+    final String realmName = realm?.name ?? '圈子';
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => context.push(AppRoutes.realmDetail(realmId), extra: realm),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: <Widget>[
+              Icon(
+                Icons.people_outline,
+                size: 16,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '该帖子已链接到 $realmName',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -204,9 +261,9 @@ class _PostActionsSheet extends StatelessWidget {
                 ClipboardData(text: 'https://capslian.app/posts/${post.id}'),
               );
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('链接已复制')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('链接已复制')));
               }
             },
           ),
@@ -251,7 +308,9 @@ class _PostActionsSheet extends StatelessWidget {
       height: 4,
       margin: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+        color: Theme.of(
+          context,
+        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(2),
       ),
     );
@@ -264,7 +323,8 @@ class _PostActionsSheet extends StatelessWidget {
     required VoidCallback onTap,
     Color? color,
   }) {
-    final Color effectiveColor = color ?? Theme.of(context).colorScheme.onSurface;
+    final Color effectiveColor =
+        color ?? Theme.of(context).colorScheme.onSurface;
     return ListTile(
       leading: Icon(icon, color: effectiveColor),
       title: Text(label, style: TextStyle(color: effectiveColor)),
@@ -298,16 +358,18 @@ class _PostActionsSheet extends StatelessWidget {
         ref.invalidate(feedsListProvider(const PostsListKey()));
         ref.invalidate(postDetailProvider(post.id));
         onPostDeleted?.call();
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          const SnackBar(content: Text('已删除帖子及相关评论与图片')),
-        );
+        ScaffoldMessenger.maybeOf(
+          context,
+        )?.showSnackBar(const SnackBar(content: Text('已删除帖子及相关评论与图片')));
       }
     } catch (err) {
       String msg = '删除失败，请重试';
       if (err is DioException) {
         final DioException e = err;
         final dynamic data = e.response?.data;
-        if (data is Map && data['error'] is String && (data['error'] as String).trim().isNotEmpty) {
+        if (data is Map &&
+            data['error'] is String &&
+            (data['error'] as String).trim().isNotEmpty) {
           msg = (data['error'] as String).trim();
         } else if ((e.message ?? '').trim().isNotEmpty) {
           msg = (e.message ?? '').trim();
@@ -330,7 +392,11 @@ class _PostActionsSheet extends StatelessWidget {
 
 /// 用户头像（圆形，支持网络图或首字母占位）。
 class _PostAvatar extends StatelessWidget {
-  const _PostAvatar({required this.user, required this.name, required this.onTap});
+  const _PostAvatar({
+    required this.user,
+    required this.name,
+    required this.onTap,
+  });
 
   final dynamic user;
   final String name;
@@ -413,12 +479,16 @@ class _PostHeader extends StatelessWidget {
                 if (handle.isNotEmpty)
                   TextSpan(
                     text: '  @$handle',
-                    style: theme.textTheme.bodySmall?.copyWith(color: secondaryColor),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: secondaryColor,
+                    ),
                   ),
                 if (timeAgo.isNotEmpty)
                   TextSpan(
                     text: ' · $timeAgo',
-                    style: theme.textTheme.bodySmall?.copyWith(color: secondaryColor),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: secondaryColor,
+                    ),
                   ),
               ],
             ),
@@ -509,7 +579,6 @@ class _PostImages extends StatelessWidget {
       ),
     );
   }
-
 }
 
 /// 带缓存的网络图片，加载失败时显示占位图。
@@ -546,7 +615,11 @@ class _ImagePlaceholder extends StatelessWidget {
 
 /// 底部操作栏：评论、转帖、喜欢、浏览量 / 收藏、转发。
 class _PostActionBar extends ConsumerStatefulWidget {
-  const _PostActionBar({required this.post, required this.authUser, required this.ref});
+  const _PostActionBar({
+    required this.post,
+    required this.authUser,
+    required this.ref,
+  });
 
   final PostModel post;
   final UserModel? authUser;
@@ -601,7 +674,10 @@ class _PostActionBarState extends ConsumerState<_PostActionBar> {
     if (widget.authUser == null) return;
     setState(() {
       _isReposted = !_isReposted;
-      _repostCount = (_repostCount + (_isReposted ? 1 : -1)).clamp(0, 999999999);
+      _repostCount = (_repostCount + (_isReposted ? 1 : -1)).clamp(
+        0,
+        999999999,
+      );
     });
   }
 
@@ -621,7 +697,8 @@ class _PostActionBarState extends ConsumerState<_PostActionBar> {
           count: widget.post.commentCount,
           color: defaultColor,
           activeColor: const Color(0xFF1D9BF0),
-          onTap: () => context.push('/posts/${widget.post.id}', extra: widget.post),
+          onTap: () =>
+              context.push('/posts/${widget.post.id}', extra: widget.post),
         ),
         const SizedBox(width: 4),
         _ActionButton(
@@ -661,12 +738,14 @@ class _PostActionBarState extends ConsumerState<_PostActionBar> {
           color: defaultColor,
           onTap: () async {
             await Clipboard.setData(
-              ClipboardData(text: 'https://capslian.app/posts/${widget.post.id}'),
+              ClipboardData(
+                text: 'https://capslian.app/posts/${widget.post.id}',
+              ),
             );
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('链接已复制')),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('链接已复制')));
             }
           },
         ),
@@ -707,10 +786,7 @@ class _ActionButton extends StatelessWidget {
             Icon(icon, size: 18, color: color),
             if (displayCount.isNotEmpty) ...<Widget>[
               const SizedBox(width: 4),
-              Text(
-                displayCount,
-                style: TextStyle(fontSize: 13, color: color),
-              ),
+              Text(displayCount, style: TextStyle(fontSize: 13, color: color)),
             ],
           ],
         ),
@@ -721,7 +797,11 @@ class _ActionButton extends StatelessWidget {
 
 /// 仅图标操作按钮（收藏、分享）。
 class _IconActionButton extends StatelessWidget {
-  const _IconActionButton({required this.icon, required this.color, required this.onTap});
+  const _IconActionButton({
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
 
   final IconData icon;
   final Color color;
