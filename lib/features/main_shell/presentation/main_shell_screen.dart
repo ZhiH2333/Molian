@@ -122,14 +122,9 @@ class _MainShellScreenState extends ConsumerState<MainShellScreen> {
                     navItems: _navItems,
                   ),
                   Expanded(
-                    child: Container(
+                      child: Container(
                       color: Theme.of(context).scaffoldBackgroundColor,
-                      child: ClipRRect(
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(16),
-                        ),
-                        child: body,
-                      ),
+                      child: body,
                     ),
                   ),
                 ],
@@ -140,10 +135,7 @@ class _MainShellScreenState extends ConsumerState<MainShellScreen> {
         return Scaffold(
           backgroundColor: Colors.transparent,
           extendBody: true,
-          body: ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-            child: body,
-          ),
+          body: body,
           bottomNavigationBar: _ConditionalBottomNav(
             currentIndex: _currentIndex,
             onDestinationSelected: (int index) =>

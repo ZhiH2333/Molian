@@ -36,7 +36,7 @@ class HomeScreen extends ConsumerWidget {
       isNoBackground: wide,
       isWideScreen: wide,
       appBar: inShell
-          ? null
+          ? AppBar(title: const Text('浏览'))
           : AppBar(
               title: const Text('Molian'),
               actions: <Widget>[
@@ -68,15 +68,34 @@ class HomeScreen extends ConsumerWidget {
                   child: Column(
                     children: <Widget>[
                       TabBar(
-                        isScrollable: true,
-                        tabAlignment: TabAlignment.start,
-                        tabs: const <Widget>[
-                          Tab(text: '发现'),
-                          Tab(text: '通知'),
+                        tabs: <Widget>[
+                          Tab(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: const <Widget>[
+                                Icon(Icons.explore_outlined, size: 20),
+                                SizedBox(width: 8),
+                                Text('发现'),
+                              ],
+                            ),
+                          ),
+                          Tab(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: const <Widget>[
+                                Icon(Icons.notifications_none_outlined, size: 20),
+                                SizedBox(width: 8),
+                                Text('通知'),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                       Expanded(
                         child: TabBarView(
+                          physics: const NeverScrollableScrollPhysics(),
                           children: <Widget>[
                             _FeedsTabContent(),
                             _NotificationsTabContent(),
