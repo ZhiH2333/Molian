@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/constants/image_upload_constants.dart';
 import '../../../core/constants/layout_constants.dart';
+import '../../../core/image/image_compression_service.dart';
 import '../../../core/responsive.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/auto_leading_button.dart';
@@ -39,9 +41,15 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     if (!confirmed || !mounted) return;
     setState(() => _isUploading = true);
     try {
+      final compressedBytes = await ImageCompressionService.compressToBytes(
+        bytes,
+        maxBytesKb: ImageUploadConstants.imageMaxKb,
+        maxWidth: ImageUploadConstants.postImageMaxDimension,
+        maxHeight: ImageUploadConstants.postImageMaxDimension,
+      );
       final repo = ref.read(filesRepositoryProvider);
       await repo.uploadAndConfirm(
-        bytes,
+        compressedBytes,
         filename: fileName,
         mimeType: 'image/jpeg',
       );

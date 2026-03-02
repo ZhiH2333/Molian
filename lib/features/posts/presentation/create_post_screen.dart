@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -19,11 +18,10 @@ import '../../files/providers/files_providers.dart';
 import '../data/models/post_model.dart';
 import '../providers/posts_providers.dart';
 
-/// 上传中单条：非 Web 用 path，Web 用 bytes+filename。
+/// 上传中单条：压缩后的字节与文件名，用于上传与重试。
 class _UploadingEntry {
-  _UploadingEntry({required this.id, this.path, this.bytes, this.filename});
+  _UploadingEntry({required this.id, this.bytes, this.filename});
   final String id;
-  final String? path;
   final Uint8List? bytes;
   final String? filename;
   String? error;
@@ -164,59 +162,10 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
     );
     if (!confirmed || !mounted) return;
     final repo = ref.read(postsRepositoryProvider);
-    if (kIsWeb) {
-      Uint8List rawBytes = previewBytes;
-      Uint8List compressedBytes;
-      try {
-        compressedBytes = await ImageCompressionService.compressToBytes(
-          rawBytes,
-          maxBytesKb: ImageUploadConstants.postImageMaxKb,
-          maxWidth: ImageUploadConstants.postImageMaxDimension,
-          maxHeight: ImageUploadConstants.postImageMaxDimension,
-        );
-      } catch (e) {
-        if (mounted)
-          setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
-        return;
-      }
-      if (!mounted) return;
-      final name = fileName;
-      final entry = _UploadingEntry(
-        id: _uuid.v4(),
-        bytes: compressedBytes,
-        filename: name,
-      );
-      setState(() => _uploadingEntries.add(entry));
-      try {
-        final url = await repo.uploadImageFromBytes(
-          compressedBytes,
-          filename: name,
-          mimeType: 'image/jpeg',
-        );
-        if (!mounted) return;
-        setState(() {
-          _uploadingEntries.removeWhere((e) => e.id == entry.id);
-          _imageUrls.add(url);
-        });
-        _confirmImageToFiles(url, name: name, size: compressedBytes.length);
-      } catch (e) {
-        if (mounted) {
-          setState(() {
-            final idx = _uploadingEntries.indexWhere((e) => e.id == entry.id);
-            if (idx >= 0)
-              _uploadingEntries[idx].error = e.toString().replaceFirst(
-                'Exception: ',
-                '',
-              );
-          });
-        }
-      }
-      return;
-    }
-    String compressedPath;
+    Uint8List compressedBytes;
     try {
-      compressedPath = await ImageCompressionService.compressToFile(
-        xFile.path,
+      compressedBytes = await ImageCompressionService.compressToBytes(
+        previewBytes,
         maxBytesKb: ImageUploadConstants.postImageMaxKb,
         maxWidth: ImageUploadConstants.postImageMaxDimension,
         maxHeight: ImageUploadConstants.postImageMaxDimension,
@@ -227,11 +176,17 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
       return;
     }
     if (!mounted) return;
-    final entry = _UploadingEntry(id: _uuid.v4(), path: compressedPath);
+    final name = fileName;
+    final entry = _UploadingEntry(
+      id: _uuid.v4(),
+      bytes: compressedBytes,
+      filename: name,
+    );
     setState(() => _uploadingEntries.add(entry));
     try {
-      final url = await repo.uploadImage(
-        compressedPath,
+      final url = await repo.uploadImageFromBytes(
+        compressedBytes,
+        filename: name,
         mimeType: 'image/jpeg',
       );
       if (!mounted) return;
@@ -239,8 +194,7 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
         _uploadingEntries.removeWhere((e) => e.id == entry.id);
         _imageUrls.add(url);
       });
-      final displayName = xFile.name.isNotEmpty ? xFile.name : 'image.jpg';
-      _confirmImageToFiles(url, name: displayName, size: 0);
+      _confirmImageToFiles(url, name: name, size: compressedBytes.length);
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -279,21 +233,15 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
   }
 
   Future<void> _retryUploading(_UploadingEntry entry) async {
+    if (entry.bytes == null || entry.filename == null) return;
     setState(() => entry.error = null);
     final repo = ref.read(postsRepositoryProvider);
     try {
-      final String url;
-      if (entry.bytes != null && entry.filename != null) {
-        url = await repo.uploadImageFromBytes(
-          entry.bytes!,
-          filename: entry.filename!,
-          mimeType: 'image/jpeg',
-        );
-      } else if (entry.path != null) {
-        url = await repo.uploadImage(entry.path!, mimeType: 'image/jpeg');
-      } else {
-        return;
-      }
+      final url = await repo.uploadImageFromBytes(
+        entry.bytes!,
+        filename: entry.filename!,
+        mimeType: 'image/jpeg',
+      );
       if (!mounted) return;
       setState(() {
         _uploadingEntries.removeWhere((e) => e.id == entry.id);
