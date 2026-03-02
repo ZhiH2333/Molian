@@ -156,10 +156,13 @@ class PostsRepository {
   }
 
   /// 上传单张图片（字节），Web 与各平台通用。
+  /// 可选 [onSendProgress] 与 [cancelToken] 用于进度与取消。
   Future<String> uploadImageFromBytes(
     Uint8List bytes, {
     required String filename,
     required String mimeType,
+    ProgressCallback? onSendProgress,
+    CancelToken? cancelToken,
   }) async {
     final parts = mimeType.split('/');
     final contentType = parts.length >= 2
@@ -172,20 +175,28 @@ class PostsRepository {
         contentType: contentType,
       ),
     });
-    return _uploadFormData(formData);
+    return _uploadFormData(
+      formData,
+      onSendProgress: onSendProgress,
+      cancelToken: cancelToken,
+    );
   }
 
-  Future<String> _uploadFormData(FormData formData) async {
+  Future<String> _uploadFormData(
+    FormData formData, {
+    ProgressCallback? onSendProgress,
+    CancelToken? cancelToken,
+  }) async {
     try {
       final response = await _dio.post<Map<String, dynamic>>(
         ApiConstants.upload,
         data: formData,
         options: Options(
-          // 默认 Dio 头是 application/json，这里必须强制 multipart，
-          // 否则 Worker /api/upload 会返回 400。
           contentType: 'multipart/form-data',
           sendTimeout: const Duration(seconds: 60),
         ),
+        onSendProgress: onSendProgress,
+        cancelToken: cancelToken,
       );
       final data = response.data;
       if (data == null || data['url'] is! String) throw Exception('上传响应异常');

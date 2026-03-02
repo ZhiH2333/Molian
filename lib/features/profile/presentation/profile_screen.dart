@@ -15,6 +15,7 @@ import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/login_prompt_view.dart';
 import '../../../shared/widgets/upload_confirm_sheet.dart';
+import '../../../shared/widgets/upload_progress_dialog.dart';
 import '../../auth/data/models/user_model.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../posts/providers/posts_providers.dart';
@@ -75,32 +76,30 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       _isLoading = true;
     });
     try {
+      final compressedBytes = await ImageCompressionService.compressToBytes(
+        previewBytes,
+        maxBytesKb: ImageUploadConstants.avatarMaxKb,
+        maxWidth: ImageUploadConstants.avatarMaxDimension,
+        maxHeight: ImageUploadConstants.avatarMaxDimension,
+      );
+      if (!mounted) return;
       final postsRepo = ref.read(postsRepositoryProvider);
       final profileRepo = ref.read(profileRepositoryProvider);
-      String url;
-      if (kIsWeb) {
-        final compressedBytes = await ImageCompressionService.compressToBytes(
-          previewBytes,
-          maxBytesKb: ImageUploadConstants.avatarMaxKb,
-          maxWidth: ImageUploadConstants.avatarMaxDimension,
-          maxHeight: ImageUploadConstants.avatarMaxDimension,
-        );
-        url = await postsRepo.uploadImageFromBytes(
+      final url = await showUploadProgressDialog<String>(
+        context,
+        totalBytes: compressedBytes.length,
+        uploadFn: (onProgress, cancelToken) => postsRepo.uploadImageFromBytes(
           compressedBytes,
           filename: fileName,
           mimeType: 'image/jpeg',
-        );
-      } else {
-        final compressedPath = await ImageCompressionService.compressToFile(
-          xFile.path,
-          maxBytesKb: ImageUploadConstants.avatarMaxKb,
-          maxWidth: ImageUploadConstants.avatarMaxDimension,
-          maxHeight: ImageUploadConstants.avatarMaxDimension,
-        );
-        url = await postsRepo.uploadImage(
-          compressedPath,
-          mimeType: 'image/jpeg',
-        );
+          onSendProgress: onProgress,
+          cancelToken: cancelToken,
+        ),
+      );
+      if (!mounted) return;
+      if (url == null) {
+        setState(() => _isLoading = false);
+        return;
       }
       await profileRepo.updateMe(avatarUrl: url);
       ref.invalidate(authStateProvider);

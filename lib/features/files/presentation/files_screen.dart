@@ -11,6 +11,7 @@ import '../../../shared/widgets/auto_leading_button.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/image_lightbox.dart';
 import '../../../shared/widgets/upload_confirm_sheet.dart';
+import '../../../shared/widgets/upload_progress_dialog.dart';
 import '../data/files_repository.dart';
 import '../data/models/file_model.dart';
 import '../providers/files_providers.dart';
@@ -47,14 +48,22 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
         maxWidth: ImageUploadConstants.postImageMaxDimension,
         maxHeight: ImageUploadConstants.postImageMaxDimension,
       );
+      if (!mounted) return;
       final repo = ref.read(filesRepositoryProvider);
-      await repo.uploadAndConfirm(
-        compressedBytes,
-        filename: fileName,
-        mimeType: 'image/jpeg',
+      final result = await showUploadProgressDialog<FileModel>(
+        context,
+        totalBytes: compressedBytes.length,
+        uploadFn: (onProgress, cancelToken) => repo.uploadAndConfirm(
+          compressedBytes,
+          filename: fileName,
+          mimeType: 'image/jpeg',
+          onSendProgress: onProgress,
+          cancelToken: cancelToken,
+        ),
       );
-      ref.invalidate(filesListProvider);
-      if (mounted) {
+      if (!mounted) return;
+      if (result != null) {
+        ref.invalidate(filesListProvider);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已上传并登记')));
       }
     } catch (e) {

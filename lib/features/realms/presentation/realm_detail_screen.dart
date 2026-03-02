@@ -1,6 +1,7 @@
+import 'dart:typed_data';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,6 +15,7 @@ import '../../../core/utils/image_url_utils.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/auto_leading_button.dart';
 import '../../../shared/widgets/upload_confirm_sheet.dart';
+import '../../../shared/widgets/upload_progress_dialog.dart';
 import '../../files/data/files_repository.dart';
 import '../../files/providers/files_providers.dart';
 import '../../posts/data/models/post_model.dart';
@@ -563,37 +565,35 @@ class _EditRealmSheetState extends ConsumerState<_EditRealmSheet> {
       _avatarPreviewBytes = previewBytes;
     });
     try {
+      final compressedBytes = await ImageCompressionService.compressToBytes(
+        previewBytes,
+        maxBytesKb: ImageUploadConstants.avatarMaxKb,
+        maxWidth: ImageUploadConstants.avatarMaxDimension,
+        maxHeight: ImageUploadConstants.avatarMaxDimension,
+      );
+      if (!mounted) return;
       final postsRepo = ref.read(postsRepositoryProvider);
-      String url;
-      if (kIsWeb) {
-        final rawBytes = previewBytes;
-        final compressedBytes = await ImageCompressionService.compressToBytes(
-          rawBytes,
-          maxBytesKb: ImageUploadConstants.avatarMaxKb,
-          maxWidth: ImageUploadConstants.avatarMaxDimension,
-          maxHeight: ImageUploadConstants.avatarMaxDimension,
-        );
-        final name = xFile.name.isNotEmpty ? xFile.name : 'avatar.jpg';
-        url = await postsRepo.uploadImageFromBytes(
+      final url = await showUploadProgressDialog<String>(
+        context,
+        totalBytes: compressedBytes.length,
+        uploadFn: (onProgress, cancelToken) => postsRepo.uploadImageFromBytes(
           compressedBytes,
-          filename: name,
+          filename: fileName,
           mimeType: 'image/jpeg',
-        );
-      } else {
-        final compressedPath = await ImageCompressionService.compressToFile(
-          xFile.path,
-          maxBytesKb: ImageUploadConstants.avatarMaxKb,
-          maxWidth: ImageUploadConstants.avatarMaxDimension,
-          maxHeight: ImageUploadConstants.avatarMaxDimension,
-        );
-        url = await postsRepo.uploadImage(
-          compressedPath,
-          mimeType: 'image/jpeg',
-        );
+          onSendProgress: onProgress,
+          cancelToken: cancelToken,
+        ),
+      );
+      if (!mounted) return;
+      if (url == null) {
+        setState(() => _uploadingAvatar = false);
+        return;
       }
       final normalized = url.trim();
       if (normalized.isEmpty) {
-        throw Exception('上传失败：未返回图片地址');
+        setState(() => _uploadingAvatar = false);
+        widget.onError('上传失败：未返回图片地址');
+        return;
       }
       final updated = await widget.repo.updateRealm(
         widget.realm.id,
@@ -609,10 +609,7 @@ class _EditRealmSheetState extends ConsumerState<_EditRealmSheet> {
           _uploadingAvatar = false;
         });
         widget.onUpdated(updated, avatarPreviewBytes: previewBytes);
-        _confirmUploadToFiles(
-          url: normalized,
-          name: xFile.name.isNotEmpty ? xFile.name : 'avatar.jpg',
-        );
+        _confirmUploadToFiles(url: normalized, name: fileName);
       }
     } catch (e) {
       if (mounted) {
@@ -642,37 +639,35 @@ class _EditRealmSheetState extends ConsumerState<_EditRealmSheet> {
       _bannerPreviewBytes = previewBytes;
     });
     try {
+      final compressedBytes = await ImageCompressionService.compressToBytes(
+        previewBytes,
+        maxBytesKb: ImageUploadConstants.postImageMaxKb,
+        maxWidth: ImageUploadConstants.postImageMaxDimension,
+        maxHeight: ImageUploadConstants.postImageMaxDimension,
+      );
+      if (!mounted) return;
       final postsRepo = ref.read(postsRepositoryProvider);
-      String url;
-      if (kIsWeb) {
-        final rawBytes = previewBytes;
-        final compressedBytes = await ImageCompressionService.compressToBytes(
-          rawBytes,
-          maxBytesKb: ImageUploadConstants.postImageMaxKb,
-          maxWidth: ImageUploadConstants.postImageMaxDimension,
-          maxHeight: ImageUploadConstants.postImageMaxDimension,
-        );
-        final name = xFile.name.isNotEmpty ? xFile.name : 'banner.jpg';
-        url = await postsRepo.uploadImageFromBytes(
+      final url = await showUploadProgressDialog<String>(
+        context,
+        totalBytes: compressedBytes.length,
+        uploadFn: (onProgress, cancelToken) => postsRepo.uploadImageFromBytes(
           compressedBytes,
-          filename: name,
+          filename: fileName,
           mimeType: 'image/jpeg',
-        );
-      } else {
-        final compressedPath = await ImageCompressionService.compressToFile(
-          xFile.path,
-          maxBytesKb: ImageUploadConstants.postImageMaxKb,
-          maxWidth: ImageUploadConstants.postImageMaxDimension,
-          maxHeight: ImageUploadConstants.postImageMaxDimension,
-        );
-        url = await postsRepo.uploadImage(
-          compressedPath,
-          mimeType: 'image/jpeg',
-        );
+          onSendProgress: onProgress,
+          cancelToken: cancelToken,
+        ),
+      );
+      if (!mounted) return;
+      if (url == null) {
+        setState(() => _uploadingBanner = false);
+        return;
       }
       final normalized = url.trim();
       if (normalized.isEmpty) {
-        throw Exception('上传失败：未返回图片地址');
+        setState(() => _uploadingBanner = false);
+        widget.onError('上传失败：未返回图片地址');
+        return;
       }
       final updated = await widget.repo.updateRealm(
         widget.realm.id,
@@ -688,10 +683,7 @@ class _EditRealmSheetState extends ConsumerState<_EditRealmSheet> {
           _uploadingBanner = false;
         });
         widget.onUpdated(updated, bannerPreviewBytes: previewBytes);
-        _confirmUploadToFiles(
-          url: normalized,
-          name: xFile.name.isNotEmpty ? xFile.name : 'banner.jpg',
-        );
+        _confirmUploadToFiles(url: normalized, name: fileName);
       }
     } catch (e) {
       if (mounted) {

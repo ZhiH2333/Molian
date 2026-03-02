@@ -20,10 +20,13 @@ class FilesRepository {
   }
 
   /// 上传文件（字节）并登记到文件列表；返回登记后的 FileModel。
+  /// 可选 [onSendProgress] 与 [cancelToken] 用于进度与取消。
   Future<FileModel> uploadAndConfirm(
     Uint8List bytes, {
     required String filename,
     required String mimeType,
+    ProgressCallback? onSendProgress,
+    CancelToken? cancelToken,
   }) async {
     final parts = mimeType.split('/');
     final contentType = parts.length >= 2 ? DioMediaType(parts[0], parts[1]) : DioMediaType('application', 'octet-stream');
@@ -34,6 +37,8 @@ class FilesRepository {
       ApiConstants.upload,
       data: formData,
       options: Options(contentType: 'multipart/form-data'),
+      onSendProgress: onSendProgress,
+      cancelToken: cancelToken,
     );
     final data = response.data;
     if (data == null || data['url'] is! String) throw Exception('上传失败');

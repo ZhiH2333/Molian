@@ -13,6 +13,7 @@ import '../../core/router/app_router.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/auto_leading_button.dart';
 import '../../shared/widgets/upload_confirm_sheet.dart';
+import '../../shared/widgets/upload_progress_dialog.dart';
 import '../files/data/files_repository.dart';
 import '../files/providers/files_providers.dart';
 import '../posts/data/models/post_model.dart';
@@ -206,12 +207,22 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
     setState(() => _uploadingEntries.add(entry));
     try {
       final repo = ref.read(postsRepositoryProvider);
-      final url = await repo.uploadImageFromBytes(
-        compressedBytes,
-        filename: name,
-        mimeType: 'image/jpeg',
+      final url = await showUploadProgressDialog<String>(
+        context,
+        totalBytes: compressedBytes.length,
+        uploadFn: (onProgress, cancelToken) => repo.uploadImageFromBytes(
+          compressedBytes,
+          filename: name,
+          mimeType: 'image/jpeg',
+          onSendProgress: onProgress,
+          cancelToken: cancelToken,
+        ),
       );
       if (!mounted) return;
+      if (url == null) {
+        setState(() => _uploadingEntries.removeWhere((e) => e.id == entry.id));
+        return;
+      }
       ref.read(createPostControllerProvider.notifier).addImageUrl(url);
       setState(() => _uploadingEntries.removeWhere((e) => e.id == entry.id));
       try {
