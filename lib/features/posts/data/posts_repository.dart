@@ -24,8 +24,11 @@ class PostsRepository {
     final uri = Uri.parse(ApiConstants.posts).replace(queryParameters: query);
     final response = await _dio.get<Map<String, dynamic>>(uri.toString());
     final data = response.data;
-    if (data == null || data['posts'] is! List) return const PostsPageResult(posts: []);
-    final list = (data['posts'] as List).map((e) => PostModel.fromJson(e as Map<String, dynamic>)).toList();
+    if (data == null || data['posts'] is! List)
+      return const PostsPageResult(posts: []);
+    final list = (data['posts'] as List)
+        .map((e) => PostModel.fromJson(e as Map<String, dynamic>))
+        .toList();
     final nextCursor = data['nextCursor'] as String?;
     return PostsPageResult(posts: list, nextCursor: nextCursor);
   }
@@ -37,8 +40,11 @@ class PostsRepository {
     final uri = Uri.parse(ApiConstants.feeds).replace(queryParameters: query);
     final response = await _dio.get<Map<String, dynamic>>(uri.toString());
     final data = response.data;
-    if (data == null || data['posts'] is! List) return const PostsPageResult(posts: []);
-    final list = (data['posts'] as List).map((e) => PostModel.fromJson(e as Map<String, dynamic>)).toList();
+    if (data == null || data['posts'] is! List)
+      return const PostsPageResult(posts: []);
+    final list = (data['posts'] as List)
+        .map((e) => PostModel.fromJson(e as Map<String, dynamic>))
+        .toList();
     final nextCursor = data['nextCursor'] as String?;
     return PostsPageResult(posts: list, nextCursor: nextCursor);
   }
@@ -57,7 +63,8 @@ class PostsRepository {
           'title': title,
           'content': content,
           'is_public': isPublic,
-          if (imageUrls != null && imageUrls.isNotEmpty) 'image_urls': imageUrls,
+          if (imageUrls != null && imageUrls.isNotEmpty)
+            'image_urls': imageUrls,
           if (communityIds != null && communityIds.isNotEmpty)
             'community_ids': communityIds,
         },
@@ -73,7 +80,9 @@ class PostsRepository {
 
   Future<PostModel?> getPost(String id) async {
     try {
-      final response = await _dio.get<Map<String, dynamic>>('${ApiConstants.posts}/$id');
+      final response = await _dio.get<Map<String, dynamic>>(
+        '${ApiConstants.posts}/$id',
+      );
       final data = response.data;
       if (data == null || data['post'] == null) return null;
       return PostModel.fromJson(data['post'] as Map<String, dynamic>);
@@ -99,9 +108,13 @@ class PostsRepository {
     if (imageUrls != null) data['image_urls'] = imageUrls;
     if (data.isEmpty) throw Exception('无有效更新字段');
     try {
-      final response = await _dio.patch<Map<String, dynamic>>('${ApiConstants.posts}/$id', data: data);
+      final response = await _dio.patch<Map<String, dynamic>>(
+        '${ApiConstants.posts}/$id',
+        data: data,
+      );
       final responseData = response.data;
-      if (responseData == null || responseData['post'] == null) throw Exception('更新响应异常');
+      if (responseData == null || responseData['post'] == null)
+        throw Exception('更新响应异常');
       return PostModel.fromJson(responseData['post'] as Map<String, dynamic>);
     } on DioException catch (e) {
       final msg = _messageFromDioException(e);
@@ -134,7 +147,10 @@ class PostsRepository {
       throw UnsupportedError('Web 端请使用 uploadImageFromBytes');
     }
     final formData = FormData.fromMap({
-      'file': await MultipartFile.fromFile(path, filename: path.split('/').last),
+      'file': await MultipartFile.fromFile(
+        path,
+        filename: path.split('/').last,
+      ),
     });
     return _uploadFormData(formData);
   }
@@ -146,7 +162,9 @@ class PostsRepository {
     required String mimeType,
   }) async {
     final parts = mimeType.split('/');
-    final contentType = parts.length >= 2 ? DioMediaType(parts[0], parts[1]) : null;
+    final contentType = parts.length >= 2
+        ? DioMediaType(parts[0], parts[1])
+        : null;
     final formData = FormData.fromMap({
       'file': MultipartFile.fromBytes(
         bytes,
@@ -158,15 +176,25 @@ class PostsRepository {
   }
 
   Future<String> _uploadFormData(FormData formData) async {
-    final response = await _dio.post<Map<String, dynamic>>(
-      ApiConstants.upload,
-      data: formData,
-      options: Options(contentType: 'multipart/form-data'),
-    );
-    final data = response.data;
-    if (data == null || data['url'] is! String) throw Exception('上传响应异常');
-    final url = data['url'] as String;
-    if (url.startsWith('http')) return url;
-    return '${ApiConstants.baseUrl}$url';
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        ApiConstants.upload,
+        data: formData,
+        options: Options(
+          // 默认 Dio 头是 application/json，这里必须强制 multipart，
+          // 否则 Worker /api/upload 会返回 400。
+          contentType: 'multipart/form-data',
+          sendTimeout: const Duration(seconds: 60),
+        ),
+      );
+      final data = response.data;
+      if (data == null || data['url'] is! String) throw Exception('上传响应异常');
+      final url = data['url'] as String;
+      if (url.startsWith('http')) return url;
+      return '${ApiConstants.baseUrl}$url';
+    } on DioException catch (e) {
+      final msg = _messageFromDioException(e);
+      throw Exception(msg);
+    }
   }
 }

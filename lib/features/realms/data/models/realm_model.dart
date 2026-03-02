@@ -6,6 +6,7 @@ class RealmModel {
     required this.slug,
     this.description,
     this.avatarUrl,
+    this.bannerUrl,
     this.createdAt,
     this.joined = false,
     this.isCreator = false,
@@ -16,6 +17,7 @@ class RealmModel {
   final String slug;
   final String? description;
   final String? avatarUrl;
+  final String? bannerUrl;
   final String? createdAt;
   final bool joined;
   final bool isCreator;
@@ -25,11 +27,27 @@ class RealmModel {
       id: json['id'] as String,
       name: json['name'] as String,
       slug: json['slug'] as String,
-      description: json['description'] as String?,
-      avatarUrl: json['avatar_url'] as String?,
-      createdAt: json['created_at'] as String?,
+      description: _readNullableString(json, <String>['description']),
+      avatarUrl: _readNullableString(json, <String>['avatar_url', 'avatarUrl']),
+      bannerUrl: _readNullableString(json, <String>['banner_url', 'bannerUrl']),
+      createdAt: _readNullableString(json, <String>['created_at', 'createdAt']),
       joined: json['joined'] as bool? ?? false,
       isCreator: json['is_creator'] as bool? ?? false,
     );
+  }
+
+  static String? _readNullableString(
+    Map<String, dynamic> json,
+    List<String> keys,
+  ) {
+    for (final String key in keys) {
+      final dynamic raw = json[key];
+      if (raw == null) continue;
+      final String value = raw.toString().trim();
+      if (value.isEmpty) return null;
+      if (value.toLowerCase() == 'null') return null;
+      return value;
+    }
+    return null;
   }
 }

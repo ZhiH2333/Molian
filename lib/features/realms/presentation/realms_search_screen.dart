@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/layout_constants.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/utils/image_url_utils.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/auto_leading_button.dart';
 import '../data/models/realm_model.dart';
@@ -120,7 +121,7 @@ class _RealmsSearchScreenState extends ConsumerState<RealmsSearchScreen> {
                           leading: CircleAvatar(
                             backgroundImage: realm.avatarUrl != null &&
                                     realm.avatarUrl!.isNotEmpty
-                                ? CachedNetworkImageProvider(realm.avatarUrl!)
+                                ? CachedNetworkImageProvider(fullImageUrl(realm.avatarUrl))
                                 : null,
                             child: realm.avatarUrl == null || realm.avatarUrl!.isEmpty
                                 ? Text(realm.name.isNotEmpty ? realm.name[0] : '?')

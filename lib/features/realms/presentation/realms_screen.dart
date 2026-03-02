@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/layout_constants.dart';
 import '../../../core/responsive.dart';
+import '../../../core/utils/image_url_utils.dart';
 import '../../../core/router/app_router.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/auto_leading_button.dart';
@@ -127,7 +128,7 @@ class _RealmsListTab extends ConsumerWidget {
                 leading: CircleAvatar(
                   backgroundImage:
                       realm.avatarUrl != null && realm.avatarUrl!.isNotEmpty
-                          ? CachedNetworkImageProvider(realm.avatarUrl!)
+                          ? CachedNetworkImageProvider(fullImageUrl(realm.avatarUrl))
                           : null,
                   child: realm.avatarUrl == null || realm.avatarUrl!.isEmpty
                       ? Text(

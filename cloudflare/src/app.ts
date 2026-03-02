@@ -1375,7 +1375,7 @@ app.get("/api/feeds", async (c) => {
 });
 
 // ----- Realms -----
-const realmsSelectColumns = "id, name, slug, description, avatar_url, created_at";
+const realmsSelectColumns = "id, name, slug, description, avatar_url, banner_url, created_at";
 
 app.get("/api/realms", async (c) => {
   const scope = c.req.query("scope") ?? "all"; // joined | mine | all
@@ -1385,7 +1385,7 @@ app.get("/api/realms", async (c) => {
     let results: Record<string, unknown>[];
     if (scope === "joined" && userId) {
       const stmt = await c.env.molian_db.prepare(
-        `SELECT r.id, r.name, r.slug, r.description, r.avatar_url, r.created_at FROM realms r INNER JOIN realm_members rm ON r.id = rm.realm_id WHERE rm.user_id = ? ORDER BY r.created_at DESC LIMIT 50`
+        `SELECT r.id, r.name, r.slug, r.description, r.avatar_url, r.banner_url, r.created_at FROM realms r INNER JOIN realm_members rm ON r.id = rm.realm_id WHERE rm.user_id = ? ORDER BY r.created_at DESC LIMIT 50`
       ).bind(userId).all();
       results = stmt.results as Record<string, unknown>[];
     } else if (scope === "mine" && userId) {
@@ -1527,7 +1527,7 @@ app.get("/api/realms/:id", async (c) => {
   const id = c.req.param("id");
   const userId = await getUserIdFromRequest(c);
   const row = await c.env.molian_db.prepare(
-    "SELECT id, name, slug, description, avatar_url, created_at FROM realms WHERE id = ? OR slug = ?"
+    "SELECT id, name, slug, description, avatar_url, banner_url, created_at FROM realms WHERE id = ? OR slug = ?"
   )
     .bind(id, id)
     .first();
@@ -1563,11 +1563,15 @@ app.patch("/api/realms/:id", async (c) => {
     canEdit = !!member;
   }
   if (!canEdit) return c.json({ error: "只有创建者可编辑" }, 403, corsHeaders());
-  const body = (await c.req.json()) as { name?: string; slug?: string; description?: string };
+  const body = (await c.req.json()) as { name?: string; slug?: string; description?: string; avatar_url?: string; banner_url?: string };
   const name = body?.name !== undefined ? String(body.name).trim() : null;
   const slug = body?.slug !== undefined ? String(body.slug).trim() : null;
   const description = body?.description !== undefined ? (body.description === null ? null : String(body.description).trim()) : undefined;
-  if (name === null && slug === null && description === undefined) return c.json({ error: "无有效更新字段" }, 400, corsHeaders());
+  const avatarUrlRaw = body?.avatar_url ?? (body as Record<string, unknown>).avatarUrl;
+  const bannerUrlRaw = body?.banner_url ?? (body as Record<string, unknown>).bannerUrl;
+  const avatarUrl = avatarUrlRaw !== undefined ? (avatarUrlRaw === null ? null : String(avatarUrlRaw).trim()) : undefined;
+  const bannerUrl = bannerUrlRaw !== undefined ? (bannerUrlRaw === null ? null : String(bannerUrlRaw).trim()) : undefined;
+  if (name === null && slug === null && description === undefined && avatarUrl === undefined && bannerUrl === undefined) return c.json({ error: "无有效更新字段" }, 400, corsHeaders());
   if (name !== null && !name) return c.json({ error: "圈子名称不能为空" }, 400, corsHeaders());
   const updates: string[] = [];
   const values: unknown[] = [];
@@ -1583,11 +1587,27 @@ app.patch("/api/realms/:id", async (c) => {
     updates.push("description = ?");
     values.push(description);
   }
+  if (avatarUrl !== undefined) {
+    updates.push("avatar_url = ?");
+    values.push(avatarUrl);
+  }
+  if (bannerUrl !== undefined) {
+    updates.push("banner_url = ?");
+    values.push(bannerUrl);
+  }
   if (updates.length === 0) return c.json({ error: "无有效更新字段" }, 400, corsHeaders());
   values.push(rid);
-  await c.env.molian_db.prepare(`UPDATE realms SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
-  const row = await c.env.molian_db.prepare(`SELECT ${realmsSelectColumns} FROM realms WHERE id = ?`).bind(rid).first();
-  return c.json({ realm: row }, 200, corsHeaders());
+  try {
+    await c.env.molian_db.prepare(`UPDATE realms SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
+    const row = await c.env.molian_db.prepare(`SELECT ${realmsSelectColumns} FROM realms WHERE id = ?`).bind(rid).first();
+    return c.json({ realm: row }, 200, corsHeaders());
+  } catch (e) {
+    const msg = e && typeof (e as { message?: string }).message === "string" ? (e as { message: string }).message : String(e);
+    if (msg.includes("no such column") && msg.includes("banner_url")) {
+      return c.json({ error: "请先执行数据库迁移以支持圈子头图（banner_url）" }, 500, corsHeaders());
+    }
+    throw e;
+  }
 });
 
 app.delete("/api/realms/:id", async (c) => {

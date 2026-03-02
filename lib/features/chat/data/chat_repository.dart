@@ -114,6 +114,7 @@ class ChatRepository {
       final res = await _dio.post<Map<String, dynamic>>(
         ApiConstants.upload,
         data: formData,
+        options: Options(contentType: 'multipart/form-data'),
       );
       final url =
           (res.data?['url'] as String? ?? res.data?['path'] as String? ?? '')
