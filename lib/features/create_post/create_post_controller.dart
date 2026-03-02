@@ -39,6 +39,24 @@ class CreatePostController extends Notifier<CreatePostState> {
     state = state.copyWith(isCircleOnly: value, errorMessage: null);
   }
 
+  void setImageUrls(List<String> urls) {
+    state = state.copyWith(imageUrls: urls, errorMessage: null);
+  }
+
+  void addImageUrl(String url) {
+    state = state.copyWith(
+      imageUrls: [...state.imageUrls, url],
+      errorMessage: null,
+    );
+  }
+
+  void removeImageUrl(String url) {
+    state = state.copyWith(
+      imageUrls: state.imageUrls.where((String u) => u != url).toList(),
+      errorMessage: null,
+    );
+  }
+
   /// 进入编辑模式并预填帖子数据。
   void setEditPost(String postId, String title, String description, String content, List<String> communityIds, bool isCircleOnly) {
     state = state.copyWith(
@@ -54,7 +72,7 @@ class CreatePostController extends Notifier<CreatePostState> {
 
   /// 清除编辑模式，回到发布新帖。
   void clearEditMode() {
-    state = state.copyWith(postId: null, errorMessage: null);
+    state = state.copyWith(postId: null, imageUrls: const [], errorMessage: null);
   }
 
   Future<bool> submit() async {
@@ -80,6 +98,7 @@ class CreatePostController extends Notifier<CreatePostState> {
           content: content,
           isPublic: isPublic,
           communityIds: ids.isEmpty ? <String>[] : ids,
+          imageUrls: state.imageUrls.isEmpty ? null : state.imageUrls,
         );
         ref.invalidate(postsListProvider(const PostsListKey()));
         ref.invalidate(feedsListProvider(const PostsListKey()));
@@ -90,6 +109,7 @@ class CreatePostController extends Notifier<CreatePostState> {
           content: content,
           isPublic: isPublic,
           communityIds: ids.isEmpty ? null : ids,
+          imageUrls: state.imageUrls.isEmpty ? null : state.imageUrls,
         );
         ref.invalidate(postsListProvider(const PostsListKey()));
         ref.invalidate(feedsListProvider(const PostsListKey()));

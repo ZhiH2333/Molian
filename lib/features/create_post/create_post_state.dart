@@ -1,9 +1,10 @@
-/// 发布帖子页状态：标题、描述、内容、已选圈子、仅圈子可见、编辑用 postId、加载与错误。
+/// 发布帖子页状态：标题、描述、内容、图片 URL、已选圈子、仅圈子可见、编辑用 postId、加载与错误。
 class CreatePostState {
   const CreatePostState({
     this.title = '',
     this.description = '',
     this.content = '',
+    this.imageUrls = const [],
     this.selectedCommunityIds = const [],
     this.isCircleOnly = false,
     this.postId,
@@ -14,6 +15,7 @@ class CreatePostState {
   final String title;
   final String description;
   final String content;
+  final List<String> imageUrls;
   final List<String> selectedCommunityIds;
   final bool isCircleOnly;
   final String? postId;
@@ -32,6 +34,7 @@ class CreatePostState {
     String? title,
     String? description,
     String? content,
+    List<String>? imageUrls,
     List<String>? selectedCommunityIds,
     bool? isCircleOnly,
     String? postId,
@@ -42,6 +45,7 @@ class CreatePostState {
       title: title ?? this.title,
       description: description ?? this.description,
       content: content ?? this.content,
+      imageUrls: imageUrls ?? this.imageUrls,
       selectedCommunityIds: selectedCommunityIds ?? this.selectedCommunityIds,
       isCircleOnly: isCircleOnly ?? this.isCircleOnly,
       postId: postId ?? this.postId,

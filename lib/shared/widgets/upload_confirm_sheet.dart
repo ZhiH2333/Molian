@@ -16,20 +16,14 @@ Future<bool> showUploadConfirmSheet(
     isScrollControlled: true,
     context: context,
     builder: (BuildContext context) {
-      return _UploadConfirmSheet(
-        fileName: fileName,
-        imageBytes: imageBytes,
-      );
+      return _UploadConfirmSheet(fileName: fileName, imageBytes: imageBytes);
     },
   );
   return result ?? false;
 }
 
 class _UploadConfirmSheet extends StatelessWidget {
-  const _UploadConfirmSheet({
-    required this.fileName,
-    this.imageBytes,
-  });
+  const _UploadConfirmSheet({required this.fileName, this.imageBytes});
 
   final String fileName;
   final Uint8List? imageBytes;
@@ -79,22 +73,18 @@ class _UploadConfirmSheet extends StatelessWidget {
                 children: [
                   const SizedBox(height: 16),
                   Text(
-                    '将要把附件 $fileName 上传到「文件」，是否继续？',
+                    '将要把附件\n$fileName\n上传到「文件」，是否继续？',
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                   const SizedBox(height: 16),
-                  Expanded(
-                    child: Center(
-                      child: _buildPreview(context),
-                    ),
-                  ),
+                  Expanded(child: Center(child: _buildPreview(context))),
                   const SizedBox(height: 8),
                   Text(
                     '您的附件将会被压缩',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontStyle: FontStyle.italic,
-                          color: Colors.grey,
-                        ),
+                      fontStyle: FontStyle.italic,
+                      color: Colors.grey,
+                    ),
                   ),
                   const SizedBox(height: 24),
                   Row(
@@ -114,9 +104,7 @@ class _UploadConfirmSheet extends StatelessWidget {
                       ),
                     ],
                   ),
-                  SizedBox(
-                    height: MediaQuery.of(context).padding.bottom + 16,
-                  ),
+                  SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
                 ],
               ),
             ),
@@ -129,10 +117,7 @@ class _UploadConfirmSheet extends StatelessWidget {
   Widget _buildPreview(BuildContext context) {
     if (imageBytes != null && imageBytes!.isNotEmpty) {
       return _PreviewImage(
-        child: Image.memory(
-          imageBytes!,
-          fit: BoxFit.contain,
-        ),
+        child: Image.memory(imageBytes!, fit: BoxFit.contain),
       );
     }
     return _PreviewImage(
@@ -153,14 +138,8 @@ class _PreviewImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ConstrainedBox(
-      constraints: const BoxConstraints(
-        maxWidth: 400,
-        maxHeight: 320,
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: child,
-      ),
+      constraints: const BoxConstraints(maxWidth: 400, maxHeight: 320),
+      child: ClipRRect(borderRadius: BorderRadius.circular(12), child: child),
     );
   }
 }
