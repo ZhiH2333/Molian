@@ -105,8 +105,7 @@ class _RealmsListTab extends ConsumerWidget {
                 ? TextButton.icon(
                     icon: const Icon(Icons.add),
                     label: const Text('创建圈子'),
-                    onPressed: () =>
-                        context.push(AppRoutes.realmsCreate),
+                    onPressed: () => context.push(AppRoutes.realmsCreate),
                   )
                 : null,
           );
@@ -128,27 +127,25 @@ class _RealmsListTab extends ConsumerWidget {
                 leading: CircleAvatar(
                   backgroundImage:
                       realm.avatarUrl != null && realm.avatarUrl!.isNotEmpty
-                          ? CachedNetworkImageProvider(fullImageUrl(realm.avatarUrl))
-                          : null,
-                  child: realm.avatarUrl == null || realm.avatarUrl!.isEmpty
-                      ? Text(
-                          realm.name.isNotEmpty ? realm.name[0] : '?',
+                      ? CachedNetworkImageProvider(
+                          fullImageUrl(realm.avatarUrl),
                         )
+                      : null,
+                  child: realm.avatarUrl == null || realm.avatarUrl!.isEmpty
+                      ? Text(realm.name.isNotEmpty ? realm.name[0] : '?')
                       : null,
                 ),
                 title: Text(realm.name),
-                subtitle: realm.description != null &&
-                        realm.description!.isNotEmpty
+                subtitle:
+                    realm.description != null && realm.description!.isNotEmpty
                     ? Text(
                         realm.description!,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       )
                     : null,
-                onTap: () => context.push(
-                  AppRoutes.realmDetail(realm.id),
-                  extra: realm,
-                ),
+                onTap: () =>
+                    context.push(AppRoutes.realmDetail(realm.id), extra: realm),
               );
             },
           ),
