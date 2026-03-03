@@ -5,8 +5,8 @@ import 'create_post_state.dart';
 
 final createPostControllerProvider =
     NotifierProvider<CreatePostController, CreatePostState>(
-  CreatePostController.new,
-);
+      CreatePostController.new,
+    );
 
 class CreatePostController extends Notifier<CreatePostState> {
   @override
@@ -58,7 +58,14 @@ class CreatePostController extends Notifier<CreatePostState> {
   }
 
   /// 进入编辑模式并预填帖子数据。
-  void setEditPost(String postId, String title, String description, String content, List<String> communityIds, bool isCircleOnly) {
+  void setEditPost(
+    String postId,
+    String title,
+    String description,
+    String content,
+    List<String> communityIds,
+    bool isCircleOnly,
+  ) {
     state = state.copyWith(
       postId: postId,
       title: title,
@@ -72,14 +79,20 @@ class CreatePostController extends Notifier<CreatePostState> {
 
   /// 清除编辑模式，回到发布新帖。
   void clearEditMode() {
-    state = state.copyWith(postId: null, imageUrls: const [], errorMessage: null);
+    state = state.copyWith(
+      postId: null,
+      imageUrls: const [],
+      errorMessage: null,
+    );
   }
 
   Future<bool> submit() async {
     final title = state.title.trim();
     final description = state.description.trim();
     final body = state.content.trim();
-    final content = description.isEmpty ? body : (body.isEmpty ? description : '$description\n$body');
+    final content = description.isEmpty
+        ? body
+        : (body.isEmpty ? description : '$description\n$body');
     if (content.isEmpty) {
       state = state.copyWith(errorMessage: '请填写内容或描述');
       return false;
@@ -87,7 +100,9 @@ class CreatePostController extends Notifier<CreatePostState> {
     final ids = state.selectedCommunityIds;
     final isCircleOnly = ids.isNotEmpty && state.isCircleOnly;
     final isPublic = ids.isEmpty || !isCircleOnly;
-    final effectiveTitle = title.isEmpty ? (content.split('\n').firstOrNull ?? content) : title;
+    final effectiveTitle = title.isEmpty
+        ? (content.split('\n').firstOrNull ?? content)
+        : title;
     state = state.copyWith(isLoading: true, errorMessage: null);
     try {
       final repo = ref.read(postsRepositoryProvider);
@@ -100,8 +115,9 @@ class CreatePostController extends Notifier<CreatePostState> {
           communityIds: ids.isEmpty ? <String>[] : ids,
           imageUrls: state.imageUrls.isEmpty ? null : state.imageUrls,
         );
-        ref.invalidate(postsListProvider(const PostsListKey()));
-        ref.invalidate(feedsListProvider(const PostsListKey()));
+        // 失效整个 family，确保所有分页 key 都会重拉，避免 Web 返回后仍命中旧缓存。
+        ref.invalidate(postsListProvider);
+        ref.invalidate(feedsListProvider);
         ref.invalidate(postDetailProvider(state.postId!));
       } else {
         await repo.createPost(
@@ -111,8 +127,8 @@ class CreatePostController extends Notifier<CreatePostState> {
           communityIds: ids.isEmpty ? null : ids,
           imageUrls: state.imageUrls.isEmpty ? null : state.imageUrls,
         );
-        ref.invalidate(postsListProvider(const PostsListKey()));
-        ref.invalidate(feedsListProvider(const PostsListKey()));
+        ref.invalidate(postsListProvider);
+        ref.invalidate(feedsListProvider);
       }
       state = state.copyWith(isLoading: false);
       return true;

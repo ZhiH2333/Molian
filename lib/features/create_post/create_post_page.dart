@@ -111,17 +111,12 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
     if (overwrite) _prefillDone = true;
     final ids = post.communityIds ?? <String>[];
     final isCircleOnly = ids.isNotEmpty && !post.isPublic;
-    ref.read(createPostControllerProvider.notifier).setEditPost(
-      post.id,
-      post.title,
-      '',
-      post.content,
-      ids,
-      isCircleOnly,
-    );
-    ref.read(createPostControllerProvider.notifier).setImageUrls(
-      post.imageUrls ?? const <String>[],
-    );
+    ref
+        .read(createPostControllerProvider.notifier)
+        .setEditPost(post.id, post.title, '', post.content, ids, isCircleOnly);
+    ref
+        .read(createPostControllerProvider.notifier)
+        .setImageUrls(post.imageUrls ?? const <String>[]);
     _titleController.text = post.title;
     _descriptionController.text = '';
     _contentController.text = post.content;
@@ -151,9 +146,9 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
     final state = ref.read(createPostControllerProvider);
     if (_totalImageCount(state) >= ImageUploadConstants.maxPostImages) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('最多添加 9 张图片')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('最多添加 9 张图片')));
       }
       return;
     }
@@ -167,9 +162,9 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
       previewBytes = await xFile.readAsBytes();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('读取图片失败: ${e.toString()}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('读取图片失败: ${e.toString()}')));
       }
       return;
     }
@@ -191,9 +186,9 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('压缩失败: ${e.toString()}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('压缩失败: ${e.toString()}')));
       }
       return;
     }
@@ -241,7 +236,10 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
         setState(() {
           final idx = _uploadingEntries.indexWhere((e) => e.id == entry.id);
           if (idx >= 0) {
-            _uploadingEntries[idx].error = e.toString().replaceFirst('Exception: ', '');
+            _uploadingEntries[idx].error = e.toString().replaceFirst(
+              'Exception: ',
+              '',
+            );
           }
         });
       }
@@ -259,7 +257,9 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
         return _CirclePickerSheet(
           selectedIds: selected,
           onConfirm: (List<String> ids) {
-            ref.read(createPostControllerProvider.notifier).setSelectedCommunityIds(ids);
+            ref
+                .read(createPostControllerProvider.notifier)
+                .setSelectedCommunityIds(ids);
             if (!context.mounted) return;
             Navigator.of(sheetContext).pop();
           },
@@ -271,28 +271,31 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
   Future<void> _submit() async {
     ref.read(createPostControllerProvider.notifier).clearError();
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    final isEdit = ref.read(createPostControllerProvider).isEditMode;
     final notifier = ref.read(createPostControllerProvider.notifier);
     final success = await notifier.submit();
     if (!mounted) return;
     if (success) {
-      final messenger = ScaffoldMessenger.of(context);
-      final isEdit = ref.read(createPostControllerProvider).isEditMode;
-      context.go(AppRoutes.home);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(isEdit ? '已保存' : '发布成功'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      });
+      ref.invalidate(postsListProvider);
+      ref.invalidate(feedsListProvider);
+      if (isEdit) {
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go(AppRoutes.home);
+        }
+      } else {
+        context.go(AppRoutes.home);
+      }
     } else {
-      final message = ref.read(createPostControllerProvider).errorMessage ?? '发布失败';
+      final message =
+          ref.read(createPostControllerProvider).errorMessage ?? '发布失败';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
           backgroundColor: Theme.of(context).colorScheme.errorContainer,
           behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
         ),
       );
     }
@@ -319,7 +322,9 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
           children: <Widget>[
             TextFormField(
               controller: _titleController,
-              onChanged: ref.read(createPostControllerProvider.notifier).setTitle,
+              onChanged: ref
+                  .read(createPostControllerProvider.notifier)
+                  .setTitle,
               focusNode: _titleFocus,
               decoration: InputDecoration(
                 labelText: '标题',
@@ -341,12 +346,15 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
               maxLines: 1,
               enabled: !state.isLoading,
               textInputAction: TextInputAction.next,
-              onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_descriptionFocus),
+              onFieldSubmitted: (_) =>
+                  FocusScope.of(context).requestFocus(_descriptionFocus),
             ),
             const SizedBox(height: LayoutConstants.kSpacingLarge),
             TextFormField(
               controller: _descriptionController,
-              onChanged: ref.read(createPostControllerProvider.notifier).setDescription,
+              onChanged: ref
+                  .read(createPostControllerProvider.notifier)
+                  .setDescription,
               focusNode: _descriptionFocus,
               decoration: InputDecoration(
                 labelText: '描述',
@@ -369,12 +377,15 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
               maxLines: 2,
               enabled: !state.isLoading,
               textInputAction: TextInputAction.next,
-              onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_contentFocus),
+              onFieldSubmitted: (_) =>
+                  FocusScope.of(context).requestFocus(_contentFocus),
             ),
             const SizedBox(height: LayoutConstants.kSpacingLarge),
             TextFormField(
               controller: _contentController,
-              onChanged: ref.read(createPostControllerProvider.notifier).setContent,
+              onChanged: ref
+                  .read(createPostControllerProvider.notifier)
+                  .setContent,
               focusNode: _contentFocus,
               decoration: InputDecoration(
                 labelText: '内容',
@@ -399,7 +410,10 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
               enabled: !state.isLoading,
               validator: (String? v) {
                 final body = (v ?? '').trim();
-                final desc = ref.read(createPostControllerProvider).description.trim();
+                final desc = ref
+                    .read(createPostControllerProvider)
+                    .description
+                    .trim();
                 if (body.isEmpty && desc.isEmpty) return '请填写描述或内容';
                 return null;
               },
@@ -421,10 +435,16 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
                         top: 0,
                         right: 0,
                         child: IconButton(
-                          icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                          icon: const Icon(
+                            Icons.close,
+                            color: Colors.white,
+                            size: 20,
+                          ),
                           onPressed: state.isLoading
                               ? null
-                              : () => ref.read(createPostControllerProvider.notifier).removeImageUrl(url),
+                              : () => ref
+                                    .read(createPostControllerProvider.notifier)
+                                    .removeImageUrl(url),
                         ),
                       ),
                     ],
@@ -459,19 +479,31 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
                                         entry.error!,
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(fontSize: 10, color: colorScheme.error),
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: colorScheme.error,
+                                        ),
                                       ),
                                       const SizedBox(height: 4),
                                       Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
                                         children: <Widget>[
                                           IconButton(
-                                            icon: const Icon(Icons.refresh, size: 18),
-                                            onPressed: () => _retryUploadingEntry(entry),
+                                            icon: const Icon(
+                                              Icons.refresh,
+                                              size: 18,
+                                            ),
+                                            onPressed: () =>
+                                                _retryUploadingEntry(entry),
                                           ),
                                           IconButton(
-                                            icon: const Icon(Icons.close, size: 18),
-                                            onPressed: () => _removeUploadingEntry(entry),
+                                            icon: const Icon(
+                                              Icons.close,
+                                              size: 18,
+                                            ),
+                                            onPressed: () =>
+                                                _removeUploadingEntry(entry),
                                           ),
                                         ],
                                       ),
@@ -482,7 +514,9 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
                                   child: SizedBox(
                                     width: 24,
                                     height: 24,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
                                   ),
                                 ),
                         ),
@@ -494,8 +528,10 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
               const SizedBox(height: 12),
             ],
             OutlinedButton.icon(
-              onPressed: state.isLoading ||
-                      _totalImageCount(state) >= ImageUploadConstants.maxPostImages
+              onPressed:
+                  state.isLoading ||
+                      _totalImageCount(state) >=
+                          ImageUploadConstants.maxPostImages
                   ? null
                   : _pickImage,
               icon: const Icon(Icons.add_photo_alternate),
@@ -517,7 +553,10 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
               child: Column(
                 children: <Widget>[
                   ListTile(
-                    leading: Icon(Icons.people_outline, color: colorScheme.primary),
+                    leading: Icon(
+                      Icons.people_outline,
+                      color: colorScheme.primary,
+                    ),
                     title: const Text('链接到圈子'),
                     subtitle: state.hasCommunities
                         ? Text('已选 ${state.selectedCommunityIds.length} 个圈子')
@@ -527,13 +566,18 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
                   ),
                   if (state.hasCommunities)
                     SwitchListTile(
-                      secondary: Icon(Icons.visibility, color: colorScheme.primary),
+                      secondary: Icon(
+                        Icons.visibility,
+                        color: colorScheme.primary,
+                      ),
                       title: const Text('仅圈子可见'),
                       subtitle: const Text('关闭则全站与圈子均可见'),
                       value: state.isCircleOnly,
                       onChanged: state.canToggleCircleOnly
                           ? (bool value) {
-                              ref.read(createPostControllerProvider.notifier).setCircleOnly(value);
+                              ref
+                                  .read(createPostControllerProvider.notifier)
+                                  .setCircleOnly(value);
                             }
                           : null,
                     ),
@@ -592,7 +636,9 @@ class _CirclePickerSheetState extends ConsumerState<_CirclePickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final async = ref.watch(realmsListProvider(const RealmsListKey(scope: RealmsScope.joined)));
+    final async = ref.watch(
+      realmsListProvider(const RealmsListKey(scope: RealmsScope.joined)),
+    );
     final theme = Theme.of(context);
 
     return DraggableScrollableSheet(
@@ -611,10 +657,7 @@ class _CirclePickerSheetState extends ConsumerState<_CirclePickerSheet> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: <Widget>[
-                  Text(
-                    '选择圈子',
-                    style: theme.textTheme.titleLarge,
-                  ),
+                  Text('选择圈子', style: theme.textTheme.titleLarge),
                   TextButton(
                     onPressed: () {
                       widget.onConfirm(_selected);
@@ -631,7 +674,9 @@ class _CirclePickerSheetState extends ConsumerState<_CirclePickerSheet> {
                   if (realms.isEmpty) {
                     return Center(
                       child: Padding(
-                        padding: const EdgeInsets.all(LayoutConstants.kSpacingLarge),
+                        padding: const EdgeInsets.all(
+                          LayoutConstants.kSpacingLarge,
+                        ),
                         child: Text(
                           '暂无已加入的圈子，请先加入圈子后再选择',
                           textAlign: TextAlign.center,
@@ -644,7 +689,9 @@ class _CirclePickerSheetState extends ConsumerState<_CirclePickerSheet> {
                   }
                   return ListView.builder(
                     controller: scrollController,
-                    padding: const EdgeInsets.only(bottom: LayoutConstants.kSpacingXLarge),
+                    padding: const EdgeInsets.only(
+                      bottom: LayoutConstants.kSpacingXLarge,
+                    ),
                     itemCount: realms.length,
                     itemBuilder: (BuildContext context, int index) {
                       final realm = realms[index];
@@ -661,7 +708,9 @@ class _CirclePickerSheetState extends ConsumerState<_CirclePickerSheet> {
                           });
                         },
                         title: Text(realm.name),
-                        subtitle: realm.description != null && realm.description!.isNotEmpty
+                        subtitle:
+                            realm.description != null &&
+                                realm.description!.isNotEmpty
                             ? Text(
                                 realm.description!,
                                 maxLines: 2,
@@ -676,14 +725,20 @@ class _CirclePickerSheetState extends ConsumerState<_CirclePickerSheet> {
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (Object err, StackTrace? _) => Center(
                   child: Padding(
-                    padding: const EdgeInsets.all(LayoutConstants.kSpacingLarge),
+                    padding: const EdgeInsets.all(
+                      LayoutConstants.kSpacingLarge,
+                    ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: <Widget>[
                         Text(err.toString(), textAlign: TextAlign.center),
                         const SizedBox(height: LayoutConstants.kSpacingMedium),
                         TextButton(
-                          onPressed: () => ref.invalidate(realmsListProvider(const RealmsListKey(scope: RealmsScope.joined))),
+                          onPressed: () => ref.invalidate(
+                            realmsListProvider(
+                              const RealmsListKey(scope: RealmsScope.joined),
+                            ),
+                          ),
                           child: const Text('重试'),
                         ),
                       ],

@@ -494,16 +494,24 @@ app.post("/api/posts", async (c) => {
       return c.json({ post: row }, 200, corsHeaders());
     } catch (e) {
       if (!isSchemaError(e)) throw e;
-      await c.env.molian_db.prepare(
-        "INSERT INTO posts (id, user_id, content, image_urls, created_at, updated_at) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))"
-      )
-        .bind(id, userId, content, imageUrlsJson)
-        .run();
-      const row = await c.env.molian_db.prepare(
+      // 可能是 INSERT 缺列（走 legacy 插入），也可能是 INSERT 已成功但 SELECT 缺列（如 view_count 未迁移），先查是否已有该 id。
+      let row = await c.env.molian_db.prepare(
         `SELECT ${postsSelectColumnsLegacy} FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id = ?`
       )
         .bind(id)
         .first();
+      if (!row || typeof row !== "object") {
+        await c.env.molian_db.prepare(
+          "INSERT INTO posts (id, user_id, content, image_urls, created_at, updated_at) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))"
+        )
+          .bind(id, userId, content, imageUrlsJson)
+          .run();
+        row = await c.env.molian_db.prepare(
+          `SELECT ${postsSelectColumnsLegacy} FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id = ?`
+        )
+          .bind(id)
+          .first();
+      }
       if (!row || typeof row !== "object") return c.json({ error: "发布失败" }, 500, corsHeaders());
       const r = row as Record<string, unknown>;
       return c.json(

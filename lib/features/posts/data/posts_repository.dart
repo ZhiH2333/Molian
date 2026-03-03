@@ -74,7 +74,9 @@ class PostsRepository {
       return PostModel.fromJson(data['post'] as Map<String, dynamic>);
     } on DioException catch (e) {
       final msg = _messageFromDioException(e);
-      throw Exception(msg);
+      final code = e.response?.statusCode;
+      final detail = code != null ? '$msg ($code)' : msg;
+      throw Exception(detail);
     }
   }
 
@@ -127,7 +129,9 @@ class PostsRepository {
       return PostModel.fromJson(responseData['post'] as Map<String, dynamic>);
     } on DioException catch (e) {
       final msg = _messageFromDioException(e);
-      throw Exception(msg);
+      final code = e.response?.statusCode;
+      final detail = code != null ? '$msg ($code)' : msg;
+      throw Exception(detail);
     }
   }
 
