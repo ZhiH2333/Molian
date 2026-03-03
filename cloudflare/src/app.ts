@@ -1656,38 +1656,54 @@ app.get("/api/realms/:id/posts", async (c) => {
   const isMember = !!userId && !!(await c.env.molian_db.prepare("SELECT 1 FROM realm_members WHERE realm_id = ? AND user_id = ?").bind(rid, userId).first());
   const publicOnly = !isMember;
   let results: Record<string, unknown>[];
-  if (cursor) {
-    const cursorRow = await c.env.molian_db.prepare(
-      publicOnly
-        ? "SELECT p.created_at FROM posts p JOIN post_communities pc ON p.id = pc.post_id WHERE pc.community_id = ? AND p.is_public = 1 AND p.id = ?"
-        : "SELECT p.created_at FROM posts p JOIN post_communities pc ON p.id = pc.post_id WHERE pc.community_id = ? AND p.id = ?"
-    ).bind(rid, cursor).first();
-    const cursorCreated = cursorRow && typeof cursorRow === "object" ? (cursorRow as Record<string, unknown>).created_at : null;
-    if (cursorCreated) {
-      const whereClause = publicOnly ? "pc.community_id = ? AND p.is_public = 1 AND p.created_at < ?" : "pc.community_id = ? AND p.created_at < ?";
-      const s = await c.env.molian_db.prepare(
-        `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id JOIN post_communities pc ON p.id = pc.post_id WHERE ${whereClause} ORDER BY p.created_at DESC LIMIT ?`
+  const runQuery = (selectColumns: string, whereClause: string, bindArgs: unknown[]) => {
+    return c.env.molian_db
+      .prepare(
+        `SELECT ${selectColumns} FROM posts p JOIN users u ON p.user_id = u.id JOIN post_communities pc ON p.id = pc.post_id WHERE ${whereClause} ORDER BY p.created_at DESC LIMIT ?`
       )
-        .bind(rid, cursorCreated, limit)
-        .all();
-      results = s.results as Record<string, unknown>[];
+      .bind(...bindArgs, limit)
+      .all();
+  };
+  try {
+    if (cursor) {
+      const cursorRow = await c.env.molian_db.prepare(
+        publicOnly
+          ? "SELECT p.created_at FROM posts p JOIN post_communities pc ON p.id = pc.post_id WHERE pc.community_id = ? AND p.is_public = 1 AND p.id = ?"
+          : "SELECT p.created_at FROM posts p JOIN post_communities pc ON p.id = pc.post_id WHERE pc.community_id = ? AND p.id = ?"
+      ).bind(rid, cursor).first();
+      const cursorCreated = cursorRow && typeof cursorRow === "object" ? (cursorRow as Record<string, unknown>).created_at : null;
+      if (cursorCreated) {
+        const whereClause = publicOnly ? "pc.community_id = ? AND p.is_public = 1 AND p.created_at < ?" : "pc.community_id = ? AND p.created_at < ?";
+        const s = await runQuery(postsSelectColumns, whereClause, [rid, cursorCreated]);
+        results = s.results as Record<string, unknown>[];
+      } else {
+        const whereClause = publicOnly ? "pc.community_id = ? AND p.is_public = 1" : "pc.community_id = ?";
+        const s = await runQuery(postsSelectColumns, whereClause, [rid]);
+        results = s.results as Record<string, unknown>[];
+      }
     } else {
       const whereClause = publicOnly ? "pc.community_id = ? AND p.is_public = 1" : "pc.community_id = ?";
-      const s = await c.env.molian_db.prepare(
-        `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id JOIN post_communities pc ON p.id = pc.post_id WHERE ${whereClause} ORDER BY p.created_at DESC LIMIT ?`
-      )
-        .bind(rid, limit)
-        .all();
+      const s = await runQuery(postsSelectColumns, whereClause, [rid]);
       results = s.results as Record<string, unknown>[];
     }
-  } else {
-    const whereClause = publicOnly ? "pc.community_id = ? AND p.is_public = 1" : "pc.community_id = ?";
-    const s = await c.env.molian_db.prepare(
-      `SELECT ${postsSelectColumns} FROM posts p JOIN users u ON p.user_id = u.id JOIN post_communities pc ON p.id = pc.post_id WHERE ${whereClause} ORDER BY p.created_at DESC LIMIT ?`
-    )
-      .bind(rid, limit)
-      .all();
-    results = s.results as Record<string, unknown>[];
+  } catch (e) {
+    if (!isSchemaError(e)) throw e;
+    if (cursor) {
+      const cursorRow = await c.env.molian_db.prepare(
+        "SELECT p.created_at FROM posts p JOIN post_communities pc ON p.id = pc.post_id WHERE pc.community_id = ? AND p.id = ?"
+      ).bind(rid, cursor).first();
+      const cursorCreated = cursorRow && typeof cursorRow === "object" ? (cursorRow as Record<string, unknown>).created_at : null;
+      if (cursorCreated) {
+        const s = await runQuery(postsSelectColumnsLegacy, "pc.community_id = ? AND p.created_at < ?", [rid, cursorCreated]);
+        results = s.results as Record<string, unknown>[];
+      } else {
+        const s = await runQuery(postsSelectColumnsLegacy, "pc.community_id = ?", [rid]);
+        results = s.results as Record<string, unknown>[];
+      }
+    } else {
+      const s = await runQuery(postsSelectColumnsLegacy, "pc.community_id = ?", [rid]);
+      results = s.results as Record<string, unknown>[];
+    }
   }
   const posts = await Promise.all(
     results.map(async (r) => {
@@ -1700,13 +1716,15 @@ app.get("/api/realms/:id/posts", async (c) => {
       }
       const commentCount = (await c.env.molian_db.prepare("SELECT COUNT(*) as c FROM comments WHERE post_id = ?").bind(postId).first()) as { c: number };
       const viewCount = typeof (r as { view_count?: number }).view_count === "number" ? (r as { view_count: number }).view_count : 0;
+      const title = (r as { title?: string }).title ?? "";
+      const isPublic = (r as { is_public?: number }).is_public ?? 1;
       return {
         id: r.id,
         user_id: r.user_id,
-        title: r.title,
+        title,
         content: r.content,
         image_urls: r.image_urls,
-        is_public: r.is_public,
+        is_public: isPublic,
         created_at: r.created_at,
         updated_at: r.updated_at,
         like_count: likeCount?.c ?? 0,

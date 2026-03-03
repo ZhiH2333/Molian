@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../debug_log.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../social/providers/social_providers.dart';
 
@@ -95,26 +94,10 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
   }
 
   Future<void> _sendFriendRequest(String targetId) async {
-    // #region agent log
-    debugLog(
-      'user_search_screen.dart:_sendFriendRequest',
-      'entry',
-      <String, dynamic>{'targetId': targetId, 'targetIdLength': targetId.length},
-      'H1_H2',
-    );
-    // #endregion
     setState(() => _sendingIds.add(targetId));
     try {
       final repo = ref.read(socialRepositoryProvider);
       await repo.sendFriendRequest(targetId);
-      // #region agent log
-      debugLog(
-        'user_search_screen.dart:_sendFriendRequest',
-        'success',
-        <String, dynamic>{'targetId': targetId},
-        'H4_H5',
-      );
-      // #endregion
       if (mounted) {
         setState(() {
           _sendingIds.remove(targetId);
@@ -122,22 +105,6 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
         });
       }
     } catch (e) {
-      // #region agent log
-      DioException? dioEx;
-      if (e is DioException) dioEx = e;
-      debugLog(
-        'user_search_screen.dart:_sendFriendRequest',
-        'catch',
-        <String, dynamic>{
-          'errorType': e.runtimeType.toString(),
-          'isDioException': dioEx != null,
-          if (dioEx != null) 'dioType': dioEx.type.toString(),
-          if (dioEx != null) 'statusCode': dioEx.response?.statusCode,
-          'message': e.toString().length > 200 ? '${e.toString().substring(0, 200)}…' : e.toString(),
-        },
-        'H3_H4',
-      );
-      // #endregion
       if (mounted) {
         setState(() => _sendingIds.remove(targetId));
         final msg = e.toString().replaceFirst('Exception: ', '');

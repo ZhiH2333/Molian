@@ -10,20 +10,43 @@ import type { Env } from "./app";
 export type { Env };
 
 const CORS_HEADERS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Max-Age": "86400",
 };
 
+/** 带 Authorization 的请求为“带凭证”请求，浏览器要求响应必须返回具体 Origin，不能为 *。 */
+function getAllowOrigin(request: Request): string {
+  const origin = request.headers.get("Origin");
+  if (
+    origin &&
+    (origin.startsWith("http://localhost") ||
+      origin.startsWith("http://127.0.0.1") ||
+      origin.includes("molian.app") ||
+      origin.includes("pages.dev"))
+  ) {
+    return origin;
+  }
+  return "*";
+}
+
+/** 为 API 响应统一加上基于请求 Origin 的 CORS 头，避免 web.molian.app 带凭证请求被浏览器拦截。 */
+function withCors(request: Request, response: Response): Response {
+  const allowOrigin = getAllowOrigin(request);
+  const newHeaders = new Headers(response.headers);
+  newHeaders.set("Access-Control-Allow-Origin", allowOrigin);
+  for (const [k, v] of Object.entries(CORS_HEADERS)) newHeaders.set(k, v);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: newHeaders,
+  });
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     if (request.method === "OPTIONS") {
-      const origin = request.headers.get("Origin");
-      const allowOrigin =
-        origin && (origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1") || origin.includes("molian.app") || origin.includes("pages.dev"))
-          ? origin
-          : "*";
+      const allowOrigin = getAllowOrigin(request);
       return new Response(null, {
         status: 204,
         headers: {
@@ -51,7 +74,8 @@ export default {
       const stub = env.CHAT.get(id);
       return stub.fetch(request);
     }
-    return app.fetch(request, env, ctx);
+    const response = await app.fetch(request, env, ctx);
+    return withCors(request, response);
   },
 };
 

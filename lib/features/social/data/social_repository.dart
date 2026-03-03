@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
 
 import '../../../core/constants/api_constants.dart';
-import '../../../debug_log.dart';
 
 /// 点赞、评论、关注、私信接口。
 class SocialRepository {
@@ -110,18 +109,6 @@ class SocialRepository {
 
   /// 发送好友申请。连接类错误时最多重试 2 次（共 3 次请求），应对冷启动或瞬时网络问题。
   Future<void> sendFriendRequest(String targetUserId) async {
-    // #region agent log
-    debugLog(
-      'social_repository.dart:sendFriendRequest',
-      'request',
-      <String, dynamic>{
-        'path': ApiConstants.friendRequests,
-        'targetUserId': targetUserId,
-        'targetUserIdLength': targetUserId.length,
-      },
-      'H2',
-    );
-    // #endregion
     Future<void> doPost() => _dio.post<Map<String, dynamic>>(
           ApiConstants.friendRequests,
           data: <String, dynamic>{'target_id': targetUserId},
@@ -140,19 +127,6 @@ class SocialRepository {
         return;
       } on DioException catch (e) {
         final isRetryable = retryableTypes.contains(e.type);
-        // #region agent log
-        debugLog(
-          'social_repository.dart:sendFriendRequest',
-          'catch',
-          <String, dynamic>{
-            'attempt': attempt,
-            'dioType': e.type.toString(),
-            'statusCode': e.response?.statusCode,
-            'isRetryable': isRetryable,
-          },
-          'H3_H4',
-        );
-        // #endregion
         if (isRetryable && attempt < 3) {
           await Future<void>.delayed(const Duration(milliseconds: 1500));
         } else {

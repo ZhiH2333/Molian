@@ -278,15 +278,13 @@ class _CreatePostPageState extends ConsumerState<CreatePostPage> {
     if (success) {
       ref.invalidate(postsListProvider);
       ref.invalidate(feedsListProvider);
-      if (isEdit) {
-        if (context.canPop()) {
-          context.pop();
-        } else {
-          context.go(AppRoutes.home);
-        }
-      } else {
-        context.go(AppRoutes.home);
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(isEdit ? '已保存' : '发布成功'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      context.go(AppRoutes.home);
     } else {
       final message =
           ref.read(createPostControllerProvider).errorMessage ?? '发布失败';
